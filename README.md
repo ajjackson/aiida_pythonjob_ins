@@ -1,4 +1,4 @@
-# aiida-python-ins
+# aiida-pythonjob-ins
 
 Proof-of-concept [AiiDA](https://www.aiida.net/) plugin that wraps inelastic
 neutron scattering (INS) Python libraries — starting with

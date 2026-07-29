@@ -1,11 +1,14 @@
-# Packaging + tooling configuration for the aiida-python-ins proof-of-concept.
+# Packaging + tooling configuration for the aiida-pythonjob-ins proof-of-concept.
 # See PLAN.md for the overall design and rationale.
+# Use uv's native build backend for consistency with the uv-based workflow
+# (https://docs.astral.sh/uv/concepts/build-backend/). setuptools would be the
+# conservative "established standard" alternative.
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
 
 [project]
-name = "aiida-python-ins"
+name = "aiida-pythonjob-ins"
 version = "0.1.0"
 description = "Proof-of-concept AiiDA plugin wrapping INS Python libraries (Euphonic first) via aiida-pythonjob."
 readme = "README.md"
@@ -53,9 +56,6 @@ dev = [
 euphonic = [
     { path = "wheels/euphonic-1.6.1+57.g3ba1eba-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", marker = "platform_machine == 'aarch64'" },
 ]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/aiida_pythonjob_ins"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

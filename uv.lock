@@ -49,7 +49,21 @@ wheels = [
 ]
 
 [[package]]
-name = "aiida-python-ins"
+name = "aiida-pythonjob"
+version = "0.5.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiida-core" },
+    { name = "ase" },
+    { name = "node-graph" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ce/43/f8bb3199d9097dd8c0be0858041bf0a350cd9795b26eab756338fe1d4241/aiida_pythonjob-0.5.2.tar.gz", hash = "sha256:2512a8e3440124a427225188d539ee660302272d3aac2bd12722263f60cd8e82", size = 42115, upload-time = "2026-03-01T19:58:08.686Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/2a/9646f438580ef5a6681ade6ec2a9f136708f4d65167a1392396ced3ce0bb/aiida_pythonjob-0.5.2-py3-none-any.whl", hash = "sha256:00304fc584cb22c34b0ab8c3eb4b0574a2364349304c1cc7fd3d9c988b30afea", size = 38734, upload-time = "2026-03-01T19:58:07.501Z" },
+]
+
+[[package]]
+name = "aiida-pythonjob-ins"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -88,20 +102,6 @@ provides-extras = ["phonopy"]
 dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.10" },
-]
-
-[[package]]
-name = "aiida-pythonjob"
-version = "0.5.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiida-core" },
-    { name = "ase" },
-    { name = "node-graph" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ce/43/f8bb3199d9097dd8c0be0858041bf0a350cd9795b26eab756338fe1d4241/aiida_pythonjob-0.5.2.tar.gz", hash = "sha256:2512a8e3440124a427225188d539ee660302272d3aac2bd12722263f60cd8e82", size = 42115, upload-time = "2026-03-01T19:58:08.686Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/2a/9646f438580ef5a6681ade6ec2a9f136708f4d65167a1392396ced3ce0bb/aiida_pythonjob-0.5.2-py3-none-any.whl", hash = "sha256:00304fc584cb22c34b0ab8c3eb4b0574a2364349304c1cc7fd3d9c988b30afea", size = 38734, upload-time = "2026-03-01T19:58:07.501Z" },
 ]
 
 [[package]]

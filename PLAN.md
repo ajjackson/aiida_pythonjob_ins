@@ -1,4 +1,4 @@
-# aiida-python-ins — Development Plan (PoC)
+# aiida-pythonjob-ins — Development Plan (PoC)
 
 > Self-contained plan for a proof-of-concept AiiDA plugin that wraps
 > inelastic-neutron-scattering (INS) Python libraries — starting with
@@ -16,8 +16,8 @@
   Python is **not** on `PATH`; use **`uv`** for everything (`uv venv`, `uv run`,
   `uv sync`). See `/workspace/AGENTS.md` for sandbox rules (tmpfs `/home/pi`,
   persistent `/workspace`, no `sudo`, no in-container git).
-- **Project location**: `/workspace/aiida-python-ins` (src-layout).
-- **Distribution name**: `aiida-python-ins`. **Import package**: `aiida_pythonjob_ins`.
+- **Project location**: `/workspace/aiida_pythonjob_ins` (src-layout).
+- **Distribution name**: `aiida-pythonjob-ins`. **Import package**: `aiida_pythonjob_ins`.
   Entry-point prefix: `pythonjob_ins`. (Names are generic because the package will
   host Euphonic + abinslib + resins wrappers, and signal the `aiida-pythonjob`
   execution model. Likely to be renamed later if the approach sticks.)
@@ -155,7 +155,7 @@ Plain Python functions wrapped for execution with `aiida-pythonjob`:
 ## 4. Project layout (src-layout)
 
 ```
-aiida-python-ins/
+aiida_pythonjob_ins/
 ├── PLAN.md                         # this file
 ├── pyproject.toml                  # metadata, deps, entry points, uv sources
 ├── uv.lock
@@ -298,6 +298,21 @@ euphonic = [
   single `result` output -> `KpointsData`.
 - **procps in the image**: added `procps` to the repo `Containerfile` so fresh
   dev containers have `ps` for AiiDA's DirectScheduler (was a manual install).
+- **Build backend**: `uv_build` (uv's native backend) for consistency with the
+  uv-based workflow; `setuptools` is the conservative "established standard"
+  alternative. The distribution (`aiida-pythonjob-ins`) normalizes to the import
+  package (`aiida_pythonjob_ins`), so `uv_build` derives the module name
+  automatically -- no `[tool.uv.build-backend]` override needed.
+- **Import-time config requirement (test collection)**: aiida-pythonjob builds
+  its serializer registry at import time via `get_config()`. With no existing
+  AiiDA config this raises `MissingConfigurationError` during pytest *collection*
+  (before fixtures run) as soon as a test module imports our package. `conftest.py`
+  handles this at module top (before importing aiida) by pointing `AIIDA_PATH` at
+  an ephemeral `tempfile.mkdtemp()` directory and calling `get_config(create=True)`
+  there, then removing it in `pytest_unconfigure`. This makes the session
+  hermetic: it runs the same with or without an existing config, and a developer's
+  real, live `~/.aiida` is never read or mutated. The `aiida_profile` fixtures
+  still supply isolated temp profiles.
 - **PythonJob Code**: the code's executable must be a Python interpreter with
   this package + euphonic installed; tests point it at `sys.executable`.
 - **Equivalence testing**: rather than hard-coding reference frequencies, tests
