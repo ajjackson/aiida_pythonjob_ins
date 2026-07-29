@@ -1,0 +1,69 @@
+# Packaging + tooling configuration for the aiida-python-ins proof-of-concept.
+# See PLAN.md for the overall design and rationale.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aiida-python-ins"
+version = "0.1.0"
+description = "Proof-of-concept AiiDA plugin wrapping INS Python libraries (Euphonic first) via aiida-pythonjob."
+readme = "README.md"
+requires-python = "==3.12.*"  # Pinned by the provided Euphonic aarch64 wheel (cp312).
+license = { text = "MIT" }
+dependencies = [
+    "aiida-core>=2.6,<3",
+    # aiida-pythonjob: run plain Python functions as AiiDA jobs (Python-API model).
+    # https://github.com/aiidateam/aiida-pythonjob
+    "aiida-pythonjob>=0.2",
+    # Euphonic: phonon/lattice-dynamics from force constants.
+    # https://euphonic.readthedocs.io  (aarch64 wheel vendored locally, see below)
+    "euphonic>=1.6.1",
+    # seekpath: high-symmetry band paths (public dependency also used by Euphonic).
+    # https://seekpath.readthedocs.io
+    "seekpath",
+]
+
+[project.optional-dependencies]
+# Euphonic's CASTEP .castep_bin reader needs no extras, but phonopy input does.
+phonopy = ["euphonic[phonopy-reader]"]
+
+[dependency-groups]
+# Dev/test tooling (PEP 735 group; installed by `uv sync`).
+dev = [
+    "pytest>=8",
+    "ruff>=0.10",
+]
+
+# --- AiiDA plugin entry points -------------------------------------------------
+# AiiDA discovers plugins via entry points; see
+# https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/plugins.html
+[project.entry-points."aiida.data"]
+"pythonjob_ins.force_constants" = "aiida_pythonjob_ins.data.force_constants:ForceConstantsData"
+"pythonjob_ins.qpoint_phonon_modes" = "aiida_pythonjob_ins.data.qpoint_phonon_modes:QpointPhononModesData"
+
+[project.entry-points."aiida.workflows"]
+"pythonjob_ins.dispersion" = "aiida_pythonjob_ins.workflows.dispersion:DispersionWorkChain"
+
+# --- Euphonic wheel workaround (aarch64 only) ----------------------------------
+# There is no aarch64 Euphonic wheel on PyPI yet. On aarch64 we point uv at the
+# vendored wheel; on any other platform (e.g. x86-64 CI) this source is skipped
+# and euphonic resolves from PyPI. Delete this block once aarch64 wheels ship.
+[tool.uv.sources]
+euphonic = [
+    { path = "wheels/euphonic-1.6.1+57.g3ba1eba-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", marker = "platform_machine == 'aarch64'" },
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aiida_pythonjob_ins"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# A pragmatic default rule set for an exemplar project.
+select = ["E", "F", "I", "UP", "B", "SIM"]
