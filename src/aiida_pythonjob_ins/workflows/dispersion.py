@@ -1,8 +1,14 @@
-"""A WorkChain composing two Euphonic PythonJobs into a dispersion workflow.
+"""A WorkChain composing Euphonic PythonJobs into a dispersion workflow.
 
-This demonstrates orchestration: the output ``ForceConstantsData`` of the first
-PythonJob (reading a CASTEP file) flows as input into the second (computing the
-band structure), with full AiiDA provenance linking the steps.
+Steps (each a separate PythonJob, so provenance links them all):
+
+1. read force constants from a CASTEP file  -> ForceConstantsData
+2. generate a seekpath q-point path         -> KpointsData (positions + labels)
+3. interpolate phonon modes on that path    -> QpointPhononModesData
+
+Finally, a ``calcfunction`` composes a native ``BandsData`` from the modes and
+the path ``KpointsData`` (carrying its high-symmetry labels). ``BandsData``
+plugs into AiiDA's plotting, e.g. ``results['band_structure'].show_mpl()``.
 
 WorkChain reference:
 https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/workflows/write.html
@@ -10,15 +16,26 @@ https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/workflows/writ
 
 from __future__ import annotations
 
-from aiida.engine import ToContext, WorkChain
-from aiida.orm import AbstractCode, Float, SinglefileData
+from aiida.engine import ToContext, WorkChain, calcfunction
+from aiida.orm import AbstractCode, BandsData, Float, KpointsData, SinglefileData
 from aiida_pythonjob import PythonJob
 
 from ..calculations import (
-    prepare_dispersion_inputs,
+    prepare_interpolation_inputs,
+    prepare_qpoint_path_inputs,
     prepare_read_force_constants_inputs,
 )
+from ..conversions import modes_to_bands_data
 from ..data import QpointPhononModesData
+
+
+@calcfunction
+def assemble_bands(modes: QpointPhononModesData, qpoints: KpointsData) -> BandsData:
+    """Compose a BandsData from phonon modes + the labelled q-point path.
+
+    A ``calcfunction`` so the BandsData is provenance-linked to its inputs.
+    """
+    return modes_to_bands_data(modes.get_modes(), kpoints=qpoints)
 
 
 class DispersionWorkChain(WorkChain):
@@ -45,13 +62,24 @@ class DispersionWorkChain(WorkChain):
         )
         spec.outline(
             cls.read_force_constants,
-            cls.compute_dispersion,
+            cls.generate_path,
+            cls.interpolate,
             cls.finalize,
         )
         spec.output(
             "phonon_modes",
             valid_type=QpointPhononModesData,
-            help="Phonon frequencies/eigenvectors along the band path.",
+            help="Frequencies + eigenvectors along the band path.",
+        )
+        spec.output(
+            "band_path",
+            valid_type=KpointsData,
+            help="The high-symmetry q-point path (positions + labels).",
+        )
+        spec.output(
+            "band_structure",
+            valid_type=BandsData,
+            help="Phonon band structure (frequencies as bands) for plotting.",
         )
         spec.exit_code(
             400,
@@ -66,21 +94,38 @@ class DispersionWorkChain(WorkChain):
         )
         return ToContext(read=self.submit(PythonJob, **inputs))
 
-    def compute_dispersion(self):
-        """Step 2: feed the force constants into the dispersion PythonJob."""
+    def generate_path(self):
+        """Step 2: build the seekpath q-point path as a KpointsData."""
         if not self.ctx.read.is_finished_ok:
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED
 
-        inputs = prepare_dispersion_inputs(
+        inputs = prepare_qpoint_path_inputs(
             self.ctx.read.outputs.result,
             q_spacing=self.inputs.q_spacing.value,
             code=self.inputs.code,
         )
-        return ToContext(dispersion=self.submit(PythonJob, **inputs))
+        return ToContext(path=self.submit(PythonJob, **inputs))
+
+    def interpolate(self):
+        """Step 3: interpolate phonon modes on the q-point path."""
+        if not self.ctx.path.is_finished_ok:
+            return self.exit_codes.ERROR_SUB_PROCESS_FAILED
+
+        inputs = prepare_interpolation_inputs(
+            self.ctx.read.outputs.result,
+            self.ctx.path.outputs.result,
+            code=self.inputs.code,
+        )
+        return ToContext(modes=self.submit(PythonJob, **inputs))
 
     def finalize(self):
-        """Expose the phonon modes as the WorkChain output."""
-        if not self.ctx.dispersion.is_finished_ok:
+        """Expose the modes, path and a composed BandsData."""
+        if not self.ctx.modes.is_finished_ok:
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED
-        self.out("phonon_modes", self.ctx.dispersion.outputs.result)
+
+        qpoints = self.ctx.path.outputs.result
+        modes = self.ctx.modes.outputs.result
+        self.out("phonon_modes", modes)
+        self.out("band_path", qpoints)
+        self.out("band_structure", assemble_bands(modes, qpoints))
         return None

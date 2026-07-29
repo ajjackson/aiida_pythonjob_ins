@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from aiida.engine import run_get_node
-from aiida.orm import CalcJobNode, Float, SinglefileData
+from aiida.orm import BandsData, CalcJobNode, Float, KpointsData, SinglefileData
 
 from aiida_pythonjob_ins.data import QpointPhononModesData
 from aiida_pythonjob_ins.workflows import DispersionWorkChain
 
 
 def test_dispersion_workchain(python_code, quartz_castep_bin):
-    """The WorkChain reads force constants then produces phonon modes.
+    """Read force constants -> q-point path -> modes -> band structure.
 
-    Also checks provenance: the WorkChain node is a parent of both PythonJob
-    steps, i.e. the two calculations were orchestrated as a single workflow.
+    Checks the native-type outputs (KpointsData path, BandsData) and that the
+    three PythonJob steps were orchestrated as one provenance graph.
     """
     castep_file = SinglefileData(str(quartz_castep_bin))
 
@@ -25,17 +25,25 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
     )
 
     assert node.is_finished_ok, node.exit_status
-    modes_node = results["phonon_modes"]
-    assert isinstance(modes_node, QpointPhononModesData)
 
+    modes_node = results["phonon_modes"]
+    band_path = results["band_path"]
+    band_structure = results["band_structure"]
+    assert isinstance(modes_node, QpointPhononModesData)
+    assert isinstance(band_path, KpointsData)
+    assert isinstance(band_structure, BandsData)
+
+    # The band path carries high-symmetry labels (e.g. Gamma).
+    assert band_path.labels, "expected labelled high-symmetry points"
+
+    # BandsData bands come from the phonon frequencies: shapes must line up with
+    # the q-point path and the number of phonon branches.
     modes = modes_node.get_modes()
     n_branches = modes.crystal.n_atoms * 3
-    assert modes.frequencies.shape[1] == n_branches
-    assert modes.frequencies.shape[0] > 1
+    bands = band_structure.get_bands()
+    assert bands.shape == (modes.frequencies.shape[0], n_branches)
+    assert band_path.get_kpoints().shape[0] == bands.shape[0]
 
-    # Two PythonJob CalcJobs (read + dispersion) were orchestrated by this
-    # WorkChain; their process labels are ``PythonJob<function_name>``.
-    calcjobs = [
-        proc for proc in node.called_descendants if isinstance(proc, CalcJobNode)
-    ]
-    assert len(calcjobs) == 2
+    # Three PythonJob CalcJobs (read + path + interpolate) were orchestrated.
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert len(calcjobs) == 3

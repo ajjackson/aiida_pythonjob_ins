@@ -34,16 +34,24 @@ Once aarch64 wheels are published to PyPI, delete the `[tool.uv.sources]` block.
 
 ## What's implemented
 
-- **Data types**: `ForceConstantsData`, `QpointPhononModesData` (wrap Euphonic
-  objects via their public JSON round-trip, stored in the node repository).
+- **Custom data types**: `ForceConstantsData`, `QpointPhononModesData` (wrap
+  Euphonic objects via their public JSON round-trip, stored in the node
+  repository).
+- **Native AiiDA types**: the seekpath step returns a `KpointsData` (q-point path
+  with high-symmetry labels), which is also the *input* q-point specification for
+  Fourier interpolation. Results map to `BandsData` (frequencies as bands), so
+  `bands.show_mpl()` plots the phonon band structure with no AiiDALab dependency.
 - **Atomic operations** (plain public-API functions, run as `aiida-pythonjob`
-  `PythonJob`s): `read_force_constants_from_castep`, `calculate_dispersion`.
-- **Workflow**: `DispersionWorkChain` chains the two PythonJobs (read force
-  constants -> compute band structure) with full provenance.
+  `PythonJob`s): `read_force_constants_from_castep`, `generate_qpoint_path`,
+  `interpolate_phonon_modes` (plus a `calculate_dispersion` convenience).
+- **Workflow**: `DispersionWorkChain` chains three PythonJobs (read force
+  constants -> seekpath q-point path -> interpolate modes) and composes a
+  `BandsData`, with full provenance.
 
 ## Usage sketch
 
 ```python
+import matplotlib
 from aiida import load_profile, orm
 from aiida.engine import run_get_node
 from aiida_pythonjob_ins.workflows import DispersionWorkChain
@@ -59,8 +67,17 @@ results, node = run_get_node(
     q_spacing=orm.Float(0.025),
     code=code,
 )
+
+results["band_path"]      # KpointsData: q-point path + high-symmetry labels
+results["band_structure"] # BandsData: phonon band structure
+results["phonon_modes"]   # QpointPhononModesData: frequencies + eigenvectors
+
+# Plot with the native AiiDA/matplotlib tooling (no AiiDALab needed):
+results["band_structure"].show_mpl()
+
+# Or drop back to Euphonic objects when needed:
 modes = results["phonon_modes"].get_modes()  # euphonic.QpointPhononModes
-spectrum = modes.get_dispersion()            # euphonic.Spectrum1D (band structure)
+spectrum = modes.get_dispersion()            # euphonic.Spectrum1D
 ```
 
 See `tests/` for runnable examples using the official AiiDA pytest fixtures.

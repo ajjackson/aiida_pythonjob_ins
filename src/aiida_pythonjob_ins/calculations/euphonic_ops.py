@@ -4,19 +4,25 @@ These functions use only the **public** Euphonic API and know nothing about
 AiiDA, so they can be unit-tested directly and reused elsewhere. They are turned
 into AiiDA processes by the helpers in :mod:`aiida_pythonjob_ins.calculations`.
 
-``calculate_dispersion`` reproduces the logic of ``euphonic.cli.dispersion``
-(https://euphonic.readthedocs.io/en/stable/cli.html#dispersion) without relying
-on Euphonic's private ``_bands_from_force_constants`` helper: it builds a
-high-symmetry q-point path with seekpath and interpolates phonon modes.
+The dispersion workflow is split into two composable steps, mirroring
+``euphonic.cli.dispersion`` (https://euphonic.readthedocs.io/en/stable/cli.html)
+without relying on Euphonic's private ``_bands_from_force_constants`` helper:
+
+1. :func:`generate_qpoint_path` -- build a high-symmetry q-point path (seekpath).
+2. :func:`interpolate_phonon_modes` -- Fourier-interpolate modes at those points.
+
+``calculate_dispersion`` is a convenience that chains the two.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import numpy as np
 
 # Imported at module level (not under TYPE_CHECKING) because aiida-pythonjob
 # resolves the function's type hints at runtime via ``typing.get_type_hints``.
 from euphonic import ForceConstants, QpointPhononModes
+
+from ..qpoint_path import QpointPath
 
 
 def read_force_constants_from_castep(filename: str) -> ForceConstants:
@@ -29,33 +35,12 @@ def read_force_constants_from_castep(filename: str) -> ForceConstants:
     return ForceConstants.from_castep(filename)
 
 
-def band_structure_qpoints(
+def _seekpath_qpoints(
     force_constants: ForceConstants,
-    q_spacing: float = 0.025,
-    *,
-    insert_gamma: bool = True,
-) -> tuple[Any, list[tuple[int, str]]]:
-    """Return q-points (and axis tick labels) for a high-symmetry band path.
-
-    Parameters
-    ----------
-    force_constants
-        Euphonic ``ForceConstants`` providing the crystal structure.
-    q_spacing
-        Target spacing between q-points along the path, in 1/Angstrom.
-    insert_gamma
-        Duplicate Gamma points so LO-TO splitting can be represented (matches
-        Euphonic's default behaviour).
-
-    Returns
-    -------
-    qpts
-        Fractional q-points (N, 3) in the crystal's reciprocal basis.
-    x_tick_labels
-        ``(index, label)`` pairs for high-symmetry points, with Greek letters
-        rendered for matplotlib.
-    """
-    import numpy as np
+    q_spacing: float,
+    insert_gamma: bool,
+) -> tuple[np.ndarray, list[tuple[int, str]]]:
+    """Return explicit q-points and ``(index, label)`` pairs for a band path."""
     import seekpath
 
     # ``to_spglib_cell`` is public; seekpath works in the *original* cell so the
@@ -69,17 +54,54 @@ def band_structure_qpoints(
     qpts = np.asarray(bandpath["explicit_kpoints_rel"])
 
     if insert_gamma:
+        # Duplicate Gamma points so LO-TO splitting can be represented (matches
+        # Euphonic's default behaviour).
         gamma_indices = [i for i in range(1, len(labels) - 1) if labels[i] == "GAMMA"]
         for index in reversed(gamma_indices):
             qpts = np.insert(qpts, index, [0.0, 0.0, 0.0], axis=0)
             labels.insert(index, "GAMMA")
 
-    x_tick_labels = [
-        (index, r"$\Gamma$" if label == "GAMMA" else label)
+    # ``Γ`` renders nicely as a matplotlib/KpointsData tick label.
+    tick_labels = [
+        (index, "\u0393" if label == "GAMMA" else label)
         for index, label in enumerate(labels)
         if label
     ]
-    return qpts, x_tick_labels
+    return qpts, tick_labels
+
+
+def generate_qpoint_path(
+    force_constants: ForceConstants,
+    q_spacing: float = 0.025,
+    *,
+    insert_gamma: bool = True,
+) -> QpointPath:
+    """Build a high-symmetry q-point path from the crystal structure.
+
+    Returns a :class:`~aiida_pythonjob_ins.qpoint_path.QpointPath` (positions +
+    labels + cell); at the AiiDA layer this becomes a native ``KpointsData``.
+    """
+    qpts, labels = _seekpath_qpoints(force_constants, q_spacing, insert_gamma)
+    cell = force_constants.crystal.cell_vectors.to("angstrom").magnitude
+    return QpointPath(qpoints=qpts, labels=labels, cell=cell)
+
+
+def interpolate_phonon_modes(
+    force_constants: ForceConstants,
+    qpoints: np.ndarray,
+    *,
+    asr: str | None = "reciprocal",
+) -> QpointPhononModes:
+    """Fourier-interpolate phonon modes at the given fractional q-points.
+
+    ``qpoints`` is an ``(N, 3)`` array in the crystal's reciprocal basis (as
+    provided by an AiiDA ``KpointsData``). This is the core
+    ``ForceConstants -> QpointPhononModes`` step.
+    """
+    # reduce_qpts=False keeps every q-point on the explicit path (matches CLI).
+    return force_constants.calculate_qpoint_phonon_modes(
+        np.asarray(qpoints), asr=asr, reduce_qpts=False
+    )
 
 
 def calculate_dispersion(
@@ -89,29 +111,6 @@ def calculate_dispersion(
     insert_gamma: bool = True,
     asr: str | None = "reciprocal",
 ) -> QpointPhononModes:
-    """Compute phonon modes along a high-symmetry band-structure path.
-
-    Parameters
-    ----------
-    force_constants
-        Interatomic force constants to interpolate from.
-    q_spacing
-        Target q-point spacing in 1/Angstrom.
-    insert_gamma
-        See :func:`band_structure_qpoints`.
-    asr
-        Acoustic sum rule applied during interpolation (Euphonic option); use
-        ``None`` to disable.
-
-    Returns
-    -------
-    QpointPhononModes
-        Frequencies and eigenvectors along the band path.
-    """
-    qpts, _ = band_structure_qpoints(
-        force_constants, q_spacing=q_spacing, insert_gamma=insert_gamma
-    )
-    # reduce_qpts=False keeps every q-point on the explicit path (matches CLI).
-    return force_constants.calculate_qpoint_phonon_modes(
-        qpts, asr=asr, reduce_qpts=False
-    )
+    """Convenience: build a band path and interpolate modes along it."""
+    qpts, _ = _seekpath_qpoints(force_constants, q_spacing, insert_gamma)
+    return interpolate_phonon_modes(force_constants, qpts, asr=asr)

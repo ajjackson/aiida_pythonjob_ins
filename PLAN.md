@@ -89,6 +89,22 @@
 
 ## 3. Architecture & design
 
+### 3.0 Native AiiDA materials-science types (KpointsData / BandsData)
+We integrate AiiDA's built-in reciprocal-space types
+(https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/data_types.html#materials-science-data-types):
+
+- **`KpointsData`** is the q-point *specification* for Fourier interpolation
+  (`ForceConstants` + `KpointsData` -> `QpointPhononModes`) and the natural
+  representation of a band path (positions + high-symmetry labels + cell). The
+  seekpath PythonJob returns a plain, picklable `QpointPath`
+  (`qpoint_path.py`) that a registered serializer converts to `KpointsData`.
+- **`BandsData`** (a `KpointsData` subclass) represents the output band
+  structure. A Euphonic `QpointPhononModes` is essentially `BandsData`
+  (frequencies) + eigenvectors, so we build `BandsData` by *composition*
+  (`conversions.modes_to_bands_data`) and keep the eigenvectors in
+  `QpointPhononModesData`. `BandsData.show_mpl()` / `export(..., 'mpl_png')`
+  plots the dispersion with no AiiDALab dependency.
+
 ### 3.1 Custom Data types (`aiida_pythonjob_ins.data`)
 Wrap Euphonic objects that move between steps. Euphonic objects expose public
 `to_dict()` / `from_dict()` and JSON file round-trips, which we use for storage.
@@ -246,11 +262,12 @@ euphonic = [
    src-layout packages, Python 3.12 pin, wheel extracted to `wheels/`, `uv sync`.
 2. [x] **Data types**: `ForceConstantsData` and `QpointPhononModesData` with
    round-trip tests (`tests/test_data_types.py`).
-3. [x] **Atomic ops**: `read_force_constants_from_castep` and
-   `calculate_dispersion` (public API only), wrapped with `aiida-pythonjob`,
-   tested on localhost (`tests/test_calculations.py`).
-4. [x] **Workflow**: `DispersionWorkChain` composes the two PythonJobs; E2E test
-   (`tests/test_workflows.py`).
+3. [x] **Atomic ops**: `read_force_constants_from_castep`, `generate_qpoint_path`
+   (seekpath) and `interpolate_phonon_modes` (public API only), wrapped with
+   `aiida-pythonjob`, tested on localhost (`tests/test_calculations.py`).
+4. [x] **Native types + workflow**: KpointsData q-point spec, BandsData output
+   (`conversions.py`), and `DispersionWorkChain` composing three PythonJobs;
+   E2E + conversion tests (`tests/test_workflows.py`, `tests/test_conversions.py`).
 5. [x] **CI**: minimal GitHub Actions workflow (`.github/workflows/ci.yml`),
    x86-64, `uv sync` + `uv run pytest`.
 6. [x] **Docs**: README with setup, wheel note, and usage example.
@@ -274,6 +291,13 @@ euphonic = [
   overloading `aiida.data` entry-point names; keeps one clean entry point per
   Data class. Our Data class constructors double as serializers
   (`ForceConstantsData(fc, user=...)`).
+- **PythonJob return types & structured outputs**: aiida-pythonjob treats a
+  `@dataclass` (or TypedDict/NamedTuple) return annotation as a *structured*
+  multi-output spec (one output port per field), bypassing type-based
+  serializers. `QpointPath` is therefore a **plain class** so it serializes as a
+  single `result` output -> `KpointsData`.
+- **procps in the image**: added `procps` to the repo `Containerfile` so fresh
+  dev containers have `ps` for AiiDA's DirectScheduler (was a manual install).
 - **PythonJob Code**: the code's executable must be a Python interpreter with
   this package + euphonic installed; tests point it at `sys.executable`.
 - **Equivalence testing**: rather than hard-coding reference frequencies, tests
