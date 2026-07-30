@@ -42,7 +42,7 @@ from aiida_pythonjob_ins.conversions import (
     structure_to_spglib_cell,
 )
 from aiida_pythonjob_ins.data import QpointPhononModesData
-from aiida_pythonjob_ins.data.base import SupportsToStructure
+from aiida_pythonjob_ins.data.mixins import SupportsToStructure
 
 
 @calcfunction

@@ -18,13 +18,13 @@ from aiida_pythonjob_ins.conversions import (
 )
 
 from .base import EuphonicJSONData
+from .mixins import CrystalStructureMixin
 
 
-class QpointPhononModesData(EuphonicJSONData):
+class QpointPhononModesData(CrystalStructureMixin, EuphonicJSONData):
     """Store a Euphonic ``QpointPhononModes`` object as an AiiDA node."""
 
     _euphonic_cls: ClassVar[type] = QpointPhononModes
-    _filename: ClassVar[str] = "qpoint_phonon_modes.json"
 
     def get_modes(self) -> QpointPhononModes:
         """Return the wrapped :class:`euphonic.QpointPhononModes`."""

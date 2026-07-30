@@ -14,13 +14,13 @@ from typing import ClassVar, Self
 from euphonic import ForceConstants
 
 from .base import EuphonicJSONData
+from .mixins import CrystalStructureMixin
 
 
-class ForceConstantsData(EuphonicJSONData):
+class ForceConstantsData(CrystalStructureMixin, EuphonicJSONData):
     """Store a Euphonic ``ForceConstants`` object as an AiiDA node."""
 
     _euphonic_cls: ClassVar[type] = ForceConstants
-    _filename: ClassVar[str] = "force_constants.json"
 
     def get_force_constants(self) -> ForceConstants:
         """Return the wrapped :class:`euphonic.ForceConstants`."""

@@ -266,7 +266,7 @@ AiiDA `Data` nodes <-> non-AiiDA objects (the boundary the bridge handles):
 |---|---|---|
 | `ForceConstantsData` (custom) | `ForceConstantsData(fc)` / `.get_force_constants()`; serializer/deserializer; `.from_castep(path)` | `euphonic.ForceConstants` (or a `.castep_bin` file) |
 | `QpointPhononModesData` (custom) | `QpointPhononModesData(modes)` / `.get_modes()`; serializer/deserializer | `euphonic.QpointPhononModes` |
-| `StructureData` (built-in) | `EuphonicJSONData.to_structure()` (on the base -> any wrapping node; native, no ASE); `structure_to_spglib_cell()` | `euphonic.Crystal` (cell + symbols + positions); spglib cell tuple |
+| `StructureData` (built-in) | `to_structure()` (via `CrystalStructureMixin`, mixed into crystal-bearing Data classes; native, no ASE); `structure_to_spglib_cell()` | `euphonic.Crystal` (cell + symbols + positions); spglib cell tuple |
 | `KpointsData` (built-in) | `qpoints_to_kpoints_data(qpts, cell, labels)` / `kpoints_data_to_qpoints()` (= `.get_kpoints()`) | `ndarray` q-points (+ labels, cell); `band_path_qpoints` returns these as a `QpointPath` NamedTuple |
 | `BandsData` (built-in) | `QpointPhononModesData.to_bands(kpoints=None)` (compose, one-way; via `modes_to_bands_data`; validates the path against the modes) | `euphonic.QpointPhononModes` (+ optional `KpointsData` for labels) |
 | `SinglefileData` (built-in) | `upload_files` staging; read by basename in the job | a `.castep_bin` file on disk |
@@ -275,8 +275,9 @@ AiiDA `Data` nodes <-> non-AiiDA objects (the boundary the bridge handles):
 AiiDA -> AiiDA transforms (parent-side calcfunctions / methods):
 - *any* node with `.to_structure()` -> `StructureData` : `extract_structure`
   (generic calcfunction, typed by the `SupportsToStructure` protocol) /
-  `.to_structure()` (defined once on `EuphonicJSONData`, so both
-  `ForceConstantsData` and `QpointPhononModesData` have it)
+  `.to_structure()` (from `CrystalStructureMixin`, explicitly mixed into
+  `ForceConstantsData` and `QpointPhononModesData` -- *not* on the JSON base, so it
+  won't leak onto crystal-less types like a future `Spectrum1DCollectionData`)
 - `StructureData` (+ `q_spacing`) -> `KpointsData` : `generate_band_path` (calcfunction, seekpath)
 - (`QpointPhononModesData`, `KpointsData`) -> `BandsData` : `assemble_bands` (calcfunction) / `.to_bands()`
 
@@ -314,6 +315,8 @@ aiida_pythonjob_ins/
 │       ├── __init__.py
 │       ├── data/
 │       │   ├── __init__.py
+│       │   ├── base.py               # EuphonicJSONData (JSON-in-repository storage)
+│       │   ├── mixins.py             # CrystalStructureMixin, SupportsToStructure
 │       │   ├── force_constants.py
 │       │   └── qpoint_phonon_modes.py
 │       ├── calculations/
