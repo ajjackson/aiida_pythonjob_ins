@@ -40,16 +40,17 @@ dependency entry and the `[tool.uv.sources]` block.
 - **Custom data types**: `ForceConstantsData`, `QpointPhononModesData` (wrap
   Euphonic objects via their public JSON round-trip, stored in the node
   repository).
-- **Native AiiDA types**: the seekpath step returns a `KpointsData` (q-point path
-  with high-symmetry labels), which is also the *input* q-point specification for
+- **Native AiiDA types**: a `KpointsData` (built by the `generate_band_path`
+  calcfunction) is both the band path and the *input* q-point specification for
   Fourier interpolation. Results map to `BandsData` (frequencies as bands), so
   `bands.show_mpl()` plots the phonon band structure with no AiiDALab dependency.
-- **Atomic operations** (plain public-API functions, run as `aiida-pythonjob`
-  `PythonJob`s): `read_force_constants_from_castep`, `generate_qpoint_path`,
-  `interpolate_phonon_modes` (plus a `calculate_dispersion` convenience).
-- **Workflow**: `DispersionWorkChain` chains three PythonJobs (read force
-  constants -> seekpath q-point path -> interpolate modes) and composes a
-  `BandsData`, with full provenance.
+- **Atomic operations** (plain public-API functions): `band_path_qpoints`
+  (seekpath), `read_force_constants_from_castep` and `interpolate_phonon_modes`
+  (plus a `calculate_dispersion` convenience). The compute-heavy read/interpolate
+  ops run as `aiida-pythonjob` `PythonJob`s.
+- **Workflow**: `DispersionWorkChain` chains two PythonJobs (read force constants,
+  interpolate modes) with two `calcfunction`s (build q-point path, compose
+  `BandsData`), with full provenance.
 
 ## Usage sketch
 

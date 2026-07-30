@@ -20,11 +20,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from aiida.orm import KpointsData, Node
+from aiida.orm import Node
 
-from .conversions import qpoints_to_kpoints_data
 from .data import ForceConstantsData, QpointPhononModesData
 
+# See PLAN.md §3.6-§3.7 for the full (de)serialization model and conversion map.
 # Python type (module.ClassName) -> dotted path of a callable returning a Data node.
 EUPHONIC_SERIALIZERS: dict[str, str] = {
     "euphonic.force_constants.ForceConstants": (
@@ -32,10 +32,6 @@ EUPHONIC_SERIALIZERS: dict[str, str] = {
     ),
     "euphonic.qpoint_phonon_modes.QpointPhononModes": (
         "aiida_pythonjob_ins.data.qpoint_phonon_modes.QpointPhononModesData"
-    ),
-    # The seekpath PythonJob returns a QpointPath, serialized to native KpointsData.
-    "aiida_pythonjob_ins.qpoint_path.QpointPath": (
-        "aiida_pythonjob_ins.serialization.qpoint_path_to_kpoints_data"
     ),
 }
 
@@ -52,16 +48,6 @@ EUPHONIC_DESERIALIZERS: dict[str, str] = {
         "aiida_pythonjob_ins.conversions.kpoints_data_to_qpoints"
     ),
 }
-
-
-def qpoint_path_to_kpoints_data(
-    qpoint_path: Any,
-    user: Any = None,  # noqa: ARG001 (required by aiida-pythonjob serializer signature)
-) -> KpointsData:
-    """Serializer: QpointPath -> aiida.orm.KpointsData (positions + labels + cell)."""
-    return qpoints_to_kpoints_data(
-        qpoint_path.qpoints, qpoint_path.cell, labels=qpoint_path.labels
-    )
 
 
 def force_constants_from_node(node: ForceConstantsData) -> Any:

@@ -32,46 +32,21 @@ from aiida_pythonjob_ins.serialization import (
 )
 
 from .euphonic_ops import (
+    band_path_qpoints,
     calculate_dispersion,
-    generate_qpoint_path,
     interpolate_phonon_modes,
     read_force_constants_from_castep,
 )
 
 __all__ = [
+    "band_path_qpoints",
     "calculate_dispersion",
-    "generate_qpoint_path",
     "interpolate_phonon_modes",
     "prepare_dispersion_inputs",
     "prepare_interpolation_inputs",
-    "prepare_qpoint_path_inputs",
     "prepare_read_force_constants_inputs",
     "read_force_constants_from_castep",
 ]
-
-
-def prepare_qpoint_path_inputs(
-    force_constants: orm.Data,
-    q_spacing: float = 0.025,
-    *,
-    computer: str | orm.Computer = "localhost",
-    code: orm.AbstractCode | None = None,
-    **kwargs: Any,
-) -> dict[str, Any]:
-    """Build inputs to run :func:`generate_qpoint_path` as a PythonJob.
-
-    Returns a seekpath high-symmetry path; its output is a native ``KpointsData``
-    (positions + labels), produced via a registered serializer.
-    """
-    return prepare_pythonjob_inputs(
-        function=generate_qpoint_path,
-        function_inputs={"force_constants": force_constants, "q_spacing": q_spacing},
-        serializers=EUPHONIC_SERIALIZERS,
-        deserializers=EUPHONIC_DESERIALIZERS,
-        computer=computer,
-        code=code,
-        **kwargs,
-    )
 
 
 def prepare_interpolation_inputs(

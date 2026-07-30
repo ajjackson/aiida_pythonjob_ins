@@ -4,14 +4,17 @@ These functions use only the **public** Euphonic API and know nothing about
 AiiDA, so they can be unit-tested directly and reused elsewhere. They are turned
 into AiiDA processes by the helpers in :mod:`aiida_pythonjob_ins.calculations`.
 
-The dispersion workflow is split into two composable steps, mirroring
+The dispersion workflow is built from composable pieces, mirroring
 ``euphonic.cli.dispersion`` (https://euphonic.readthedocs.io/en/stable/cli.html)
 without relying on Euphonic's private ``_bands_from_force_constants`` helper:
 
-1. :func:`generate_qpoint_path` -- build a high-symmetry q-point path (seekpath).
+1. :func:`band_path_qpoints` -- build a high-symmetry q-point path (seekpath).
 2. :func:`interpolate_phonon_modes` -- Fourier-interpolate modes at those points.
 
-``calculate_dispersion`` is a convenience that chains the two.
+``calculate_dispersion`` is a convenience that chains the two. The band path is
+turned into a native ``KpointsData`` by a parent-side ``calcfunction`` (see
+:func:`aiida_pythonjob_ins.workflows.dispersion.generate_band_path`), so these
+functions stay AiiDA-free and unit-testable.
 """
 
 from __future__ import annotations
@@ -24,8 +27,6 @@ import seekpath
 # Imported at module level (not under TYPE_CHECKING) because aiida-pythonjob
 # resolves the function's type hints at runtime via ``typing.get_type_hints``.
 from euphonic import ForceConstants, QpointPhononModes
-
-from aiida_pythonjob_ins.qpoint_path import QpointPath
 
 # Library code only *emits* logs; it never configures handlers or levels -- the
 # host application (or AiiDA) decides how these are surfaced. When these functions
@@ -45,12 +46,17 @@ def read_force_constants_from_castep(filename: str) -> ForceConstants:
     return ForceConstants.from_castep(filename)
 
 
-def _seekpath_qpoints(
+def band_path_qpoints(
     force_constants: ForceConstants,
-    q_spacing: float,
-    insert_gamma: bool,
+    q_spacing: float = 0.025,
+    *,
+    insert_gamma: bool = True,
 ) -> tuple[np.ndarray, list[tuple[int, str]]]:
-    """Return explicit q-points and ``(index, label)`` pairs for a band path."""
+    """Return explicit q-points and ``(index, label)`` pairs for a band path.
+
+    Pure/AiiDA-free: the parent-side ``generate_band_path`` calcfunction wraps this
+    and packages the result (plus the cell) into a native ``KpointsData``.
+    """
     # ``to_spglib_cell`` is public; seekpath works in the *original* cell so the
     # returned q-points are valid inputs to ``calculate_qpoint_phonon_modes``.
     structure = force_constants.crystal.to_spglib_cell()
@@ -75,28 +81,12 @@ def _seekpath_qpoints(
         for index, label in enumerate(labels)
         if label
     ]
-    return qpts, tick_labels
-
-
-def generate_qpoint_path(
-    force_constants: ForceConstants,
-    q_spacing: float = 0.025,
-    *,
-    insert_gamma: bool = True,
-) -> QpointPath:
-    """Build a high-symmetry q-point path from the crystal structure.
-
-    Returns a :class:`~aiida_pythonjob_ins.qpoint_path.QpointPath` (positions +
-    labels + cell); at the AiiDA layer this becomes a native ``KpointsData``.
-    """
-    qpts, labels = _seekpath_qpoints(force_constants, q_spacing, insert_gamma)
-    cell = force_constants.crystal.cell_vectors.to("angstrom").magnitude
     LOGGER.info(
         "Generated band path: %d q-points, %d high-symmetry points",
         len(qpts),
-        len(labels),
+        len(tick_labels),
     )
-    return QpointPath(qpoints=qpts, labels=labels, cell=cell)
+    return qpts, tick_labels
 
 
 def interpolate_phonon_modes(
@@ -131,5 +121,5 @@ def calculate_dispersion(
     asr: str | None = "reciprocal",
 ) -> QpointPhononModes:
     """Convenience: build a band path and interpolate modes along it."""
-    qpts, _ = _seekpath_qpoints(force_constants, q_spacing, insert_gamma)
+    qpts, _ = band_path_qpoints(force_constants, q_spacing, insert_gamma=insert_gamma)
     return interpolate_phonon_modes(force_constants, qpts, asr=asr)

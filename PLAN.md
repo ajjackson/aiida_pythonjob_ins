@@ -112,9 +112,9 @@ We integrate AiiDA's built-in reciprocal-space types
 
 - **`KpointsData`** is the q-point *specification* for Fourier interpolation
   (`ForceConstants` + `KpointsData` -> `QpointPhononModes`) and the natural
-  representation of a band path (positions + high-symmetry labels + cell). The
-  seekpath PythonJob returns a plain, picklable `QpointPath`
-  (`qpoint_path.py`) that a registered serializer converts to `KpointsData`.
+  representation of a band path (positions + high-symmetry labels + cell). It is
+  built directly by the parent-side `generate_band_path` calcfunction (seekpath),
+  so no custom carrier type is needed.
 - **`BandsData`** (a `KpointsData` subclass) represents the output band
   structure. A Euphonic `QpointPhononModes` is essentially `BandsData`
   (frequencies) + eigenvectors, so we build `BandsData` by *composition*
@@ -218,6 +218,73 @@ source: `calculations/pythonjob.py`, `calculations/utils.py`, `utils.py`):
   drifts. cloudpickle round-trips are sensitive to version skew (cloudpickle
   version, numpy ABI, euphonic version), so keeping the two environments closely
   matched is a feature, not overhead.
+
+### 3.6 Data-type constraints across process types
+Reference for the four process kinds we (could) use. `PyFunction:calcfunction ::
+PythonJob:CalcJob`; the aiida-pythonjob pair adds an automatic (de)serialization
+layer so you write plain Python instead of hand-wrapping `Data` nodes.
+
+| Process | Runs where | Inputs | Outputs |
+|---|---|---|---|
+| **CalcFunction**/WorkFunction | AiiDA runner (profile present) | `Data` nodes only | freshly created, **unstored** `Data` nodes |
+| **CalcJob** | executable on a `Computer` (local/remote) | `Data` nodes -> input **files** | a `Parser` builds output nodes from retrieved **files** |
+| **PyFunction** | AiiDA runner (in-process) | plain Python (or nodes), serialized->node->deserialized | `func` returns plain Python, serialized to nodes |
+| **PythonJob** | separate interpreter on a `Computer` (no profile) | plain Python; parent serializes+deserializes, cloudpickles | plain Python -> `results.pickle` -> parent serializes to nodes |
+
+Key consequences:
+- CalcFunction outputs must be **unstored nodes it created** (returning a plain
+  value, or an already-stored node, raises).
+- A **PythonJob function must return plain Python, not a node** -- it has no
+  profile to build one; the node is created parent-side by the serializer. (This
+  is why `generate_band_path` is a calcfunction, not a PythonJob.)
+- **PyFunction** *may* return a node (it runs in-process), but returning plain
+  Python + a serializer is the idiomatic style.
+
+The **serializer/deserializer bridge** (PyFunction & PythonJob only):
+- *serializer*: keyed by **Python type** `module.ClassName`; called
+  `serializer(obj, user=user) -> Node`. Resolution: already-a-node -> builtin
+  (int/float/str/bool/list/dict, numpy, `ase.Atoms`->StructureData, ...) ->
+  registered serializer -> `JsonableData` (needs `to_dict`/`from_dict`) ->
+  `PickledData` (cloudpickle) -> error.
+- *deserializer*: keyed by **node type** `module.ClassName`; called
+  `deserializer(node) -> python`. Resolution: node `.value` if present ->
+  registered deserializer -> error.
+- Registration (later overrides earlier): builtins -> `aiida.data` entry points
+  (serializers only; entry-point *name* minus its first segment must equal the
+  Python `module.ClassName`; a `Data` class whose `__init__(value, user=...)`
+  builds the node doubles as its serializer) -> pythonjob config file ->
+  explicit `prepare_*_inputs(serializers=..., deserializers=...)`. **We use the
+  explicit dicts** (`serialization.EUPHONIC_SERIALIZERS`/`_DESERIALIZERS`), which
+  avoids duplicate-key clashes and keeps our `aiida.data` entry points as clean
+  one-per-class registrations (their names have no dot after the prefix, so
+  serializer discovery skips them).
+
+### 3.7 Data types and conversion routes in this package
+AiiDA `Data` nodes <-> non-AiiDA objects (the boundary the bridge handles):
+
+| AiiDA Data | conversion | other data |
+|---|---|---|
+| `ForceConstantsData` (custom) | `ForceConstantsData(fc)` / `.get_force_constants()`; serializer/deserializer; `.from_castep(path)` | `euphonic.ForceConstants` (or a `.castep_bin` file) |
+| `QpointPhononModesData` (custom) | `QpointPhononModesData(modes)` / `.get_modes()`; serializer/deserializer | `euphonic.QpointPhononModes` |
+| `KpointsData` (built-in) | `qpoints_to_kpoints_data(qpts, cell, labels)` / `kpoints_data_to_qpoints()` (= `.get_kpoints()`) | `ndarray` of fractional q-points (+ labels, cell) |
+| `BandsData` (built-in) | `modes_to_bands_data(modes, kpoints)` (compose, one-way) | `euphonic.QpointPhononModes` (+ `KpointsData` for labels) |
+| `SinglefileData` (built-in) | `upload_files` staging; read by basename in the job | a `.castep_bin` file on disk |
+| `Float`, `Str` (built-in) | aiida-pythonjob builtin serializers (automatic) | Python `float` (`q_spacing`), `str` (`filename`) |
+
+Convenience AiiDA -> AiiDA views (on `QpointPhononModesData`):
+- `.get_kpoints()` -> `KpointsData` (positions only; no labels)
+- `.get_bands(kpoints=...)` -> `BandsData` (frequencies as bands; labels from the path)
+
+Non-AiiDA -> non-AiiDA transforms (pure `euphonic_ops` / Euphonic API):
+- `.castep_bin` -> `euphonic.ForceConstants` : `read_force_constants_from_castep` (`ForceConstants.from_castep`)
+- `euphonic.ForceConstants` -> (`ndarray` q-points, labels) : `band_path_qpoints` (seekpath)
+- `euphonic.ForceConstants` + `ndarray` q-points -> `euphonic.QpointPhononModes` : `interpolate_phonon_modes`
+- `euphonic.QpointPhononModes` -> `euphonic.Spectrum1D` : `.get_dispersion()` (euphonic-native band structure for plotting)
+
+Note: there are currently no ad-hoc `dict` exchange payloads -- typed objects
+(`Data` nodes, Euphonic classes, or `ndarray`) carry all inputs/outputs. Code and
+Computer enter as the standard `AbstractCode`/`Computer` inputs (infrastructure,
+not science data).
 
 ---
 
@@ -331,11 +398,13 @@ euphonic = [
    src-layout packages, Python 3.12 pin, wheel extracted to `wheels/`, `uv sync`.
 2. [x] **Data types**: `ForceConstantsData` and `QpointPhononModesData` with
    round-trip tests (`tests/test_data_types.py`).
-3. [x] **Atomic ops**: `read_force_constants_from_castep`, `generate_qpoint_path`
-   (seekpath) and `interpolate_phonon_modes` (public API only), wrapped with
-   `aiida-pythonjob`, tested on localhost (`tests/test_calculations.py`).
-4. [x] **Native types + workflow**: KpointsData q-point spec, BandsData output
-   (`conversions.py`), and `DispersionWorkChain` composing three PythonJobs;
+3. [x] **Atomic ops**: `read_force_constants_from_castep`, `band_path_qpoints`
+   (seekpath) and `interpolate_phonon_modes` (public API only); the compute-heavy
+   read/interpolate ops run via `aiida-pythonjob`, tested on localhost
+   (`tests/test_calculations.py`).
+4. [x] **Native types + workflow**: KpointsData q-point spec (built by the
+   `generate_band_path` calcfunction), BandsData output (`conversions.py`), and
+   `DispersionWorkChain` composing two PythonJobs + two calcfunctions;
    E2E + conversion tests (`tests/test_workflows.py`, `tests/test_conversions.py`).
 5. [x] **CI**: minimal GitHub Actions workflow (`.github/workflows/ci.yml`),
    x86-64, `uv sync` + `uv run pytest`.
@@ -362,9 +431,13 @@ euphonic = [
   (`ForceConstantsData(fc, user=...)`).
 - **PythonJob return types & structured outputs**: aiida-pythonjob treats a
   `@dataclass` (or TypedDict/NamedTuple) return annotation as a *structured*
-  multi-output spec (one output port per field), bypassing type-based
-  serializers. `QpointPath` is therefore a **plain class** so it serializes as a
-  single `result` output -> `KpointsData`.
+  multi-output spec (one output port per field), bypassing type-based serializers.
+  (This is why a returned plain object serializes as a single `result`.)
+- **KpointsData is built parent-side**: a PythonJob function runs in a remote
+  subprocess with no loaded AiiDA profile, so it cannot construct an AiiDA node
+  (e.g. `KpointsData`). Band-path generation is therefore a `calcfunction`
+  (`generate_band_path`), which returns a native `KpointsData` directly -- simpler
+  than shipping a custom carrier out of a PythonJob and serializing it.
 - **procps in the image**: added `procps` to the repo `Containerfile` so fresh
   dev containers have `ps` for AiiDA's DirectScheduler (was a manual install).
 - **Logging (not print)**: the atomic ops use a module `logging` logger

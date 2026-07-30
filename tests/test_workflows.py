@@ -44,6 +44,7 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
     assert bands.shape == (modes.frequencies.shape[0], n_branches)
     assert band_path.get_kpoints().shape[0] == bands.shape[0]
 
-    # Three PythonJob CalcJobs (read + path + interpolate) were orchestrated.
+    # Two PythonJob CalcJobs (read + interpolate) were orchestrated; the band path
+    # and band-structure steps are calcfunctions, not CalcJobs.
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
-    assert len(calcjobs) == 3
+    assert len(calcjobs) == 2

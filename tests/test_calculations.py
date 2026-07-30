@@ -11,8 +11,6 @@ from euphonic import ForceConstants
 
 from aiida_pythonjob_ins.calculations import (
     calculate_dispersion,
-    generate_qpoint_path,
-    interpolate_phonon_modes,
     prepare_dispersion_inputs,
     read_force_constants_from_castep,
 )
@@ -22,15 +20,16 @@ OPS_LOGGER = "aiida_pythonjob_ins.calculations.euphonic_ops"
 
 
 def test_operations_emit_logs(quartz_castep_bin, caplog):
-    """Each atomic operation emits an informative INFO log record.
+    """The atomic operations emit informative INFO log records.
 
     Verifies the library's logging is wired correctly. Library code only emits
     (never configures) logging, so the test raises the level via ``caplog``.
+    ``calculate_dispersion`` chains the band-path and interpolation helpers, so it
+    exercises both of their log messages.
     """
     with caplog.at_level(logging.INFO, logger=OPS_LOGGER):
         force_constants = read_force_constants_from_castep(str(quartz_castep_bin))
-        path = generate_qpoint_path(force_constants, q_spacing=0.3)
-        interpolate_phonon_modes(force_constants, path.qpoints)
+        calculate_dispersion(force_constants, q_spacing=0.3)
 
     messages = [rec.getMessage() for rec in caplog.records if rec.name == OPS_LOGGER]
     assert any("Reading force constants" in msg for msg in messages)

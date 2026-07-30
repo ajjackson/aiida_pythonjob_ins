@@ -5,21 +5,21 @@ from __future__ import annotations
 import matplotlib as mpl
 import numpy as np
 from aiida.engine import run_get_node
-from aiida.orm import BandsData, KpointsData
+from aiida.orm import BandsData, Float, KpointsData
 from aiida_pythonjob import PythonJob
 from euphonic import ForceConstants
 
 from aiida_pythonjob_ins.calculations import (
-    generate_qpoint_path,
+    calculate_dispersion,
     interpolate_phonon_modes,
     prepare_interpolation_inputs,
-    prepare_qpoint_path_inputs,
 )
 from aiida_pythonjob_ins.conversions import (
     kpoints_data_to_qpoints,
     qpoints_to_kpoints_data,
 )
 from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
+from aiida_pythonjob_ins.workflows.dispersion import generate_band_path
 
 
 def test_kpoints_roundtrip(aiida_profile):
@@ -55,9 +55,7 @@ def test_bandsdata_matplotlib_export(aiida_profile, quartz_castep_bin, tmp_path)
     mpl.use("Agg")  # headless
 
     force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
-    modes = interpolate_phonon_modes(
-        force_constants, generate_qpoint_path(force_constants, q_spacing=0.3).qpoints
-    )
+    modes = calculate_dispersion(force_constants, q_spacing=0.3)
     bands = QpointPhononModesData(modes).get_bands()
     bands.store()
 
@@ -74,15 +72,10 @@ def test_interpolation_from_kpoints_matches_direct(python_code, quartz_castep_bi
     ForceConstants -> QpointPhononModes step.
     """
     force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
-    fc_node = ForceConstantsData(force_constants)
+    fc_node = ForceConstantsData(force_constants).store()
 
-    # Build the path as a KpointsData via the seekpath PythonJob.
-    path_results, path_node = run_get_node(
-        PythonJob,
-        **prepare_qpoint_path_inputs(fc_node, q_spacing=0.2, code=python_code),
-    )
-    assert path_node.is_finished_ok, path_node.exit_status
-    kpoints = path_results["result"]
+    # Build the path as a KpointsData via the parent-side calcfunction.
+    kpoints = generate_band_path(fc_node, Float(0.2))
     assert isinstance(kpoints, KpointsData)
 
     expected = interpolate_phonon_modes(force_constants, kpoints.get_kpoints())
