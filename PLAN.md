@@ -21,11 +21,11 @@
   Entry-point prefix: `pythonjob_ins`. (Names are generic because the package will
   host Euphonic + abinslib + resins wrappers, and signal the `aiida-pythonjob`
   execution model. Likely to be renamed later if the approach sticks.)
-- **Euphonic wheel**: A prebuilt aarch64 wheel is provided because PyPI has no
-  aarch64 wheel yet. It lives inside `/workspace/wheel-manylinux-3.12-aarch64.zip`,
-  which contains:
-  `euphonic-1.6.1+57.g3ba1eba-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl`
-  This wheel requires **Python 3.12**.
+- **Euphonic wheel**: A prebuilt aarch64-Linux wheel is provided because PyPI has
+  no aarch64-Linux 2.x wheel yet. The vendored file is
+  `euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl`
+  (a 2.0.x pre-release build; the official release is 2.0.0). It requires
+  **Python 3.12** and is placed in `wheels/` (gitignored).
 - **Euphonic source repo**: When implementation starts, ask the user to expose the
   Euphonic repository read-only at `/inspect`. It contains the existing unit/script
   tests and reference data for phonon dispersion, to be reused as test fixtures.
@@ -78,12 +78,27 @@
 
 - **Python**: 3.12 (pinned by the provided Euphonic wheel).
 - **Package manager**: `uv` (`uv venv --python 3.12`, `uv sync`, `uv run pytest`).
-- **Core dependencies**:
-  - `aiida-core`
-  - `aiida-pythonjob`
-  - `euphonic` (PyPI on x86-64; vendored aarch64 wheel locally — see §6)
-  - Dev: `pytest`, `pytest-regressions` (optional, matches Euphonic style),
-    `pgtest`/`aiida-core[tests]` for AiiDA fixtures.
+- **Dependency-pinning principle** (this is a *plugin*, co-installed with others):
+  bound each dependency by *our own* API usage; add upper caps only where
+  individually justified; never mirror a sibling dependency's transitive
+  constraints (the resolver intersects everyone's requirements). Avoid needlessly
+  narrow pins that could conflict with other plugins.
+- **Core dependencies** (see `pyproject.toml` for exact specifiers + rationale):
+  - `aiida-core>=2.6,<3` — floor = our own use (SQLite test backend +
+    `aiida.tools.pytest_fixtures`, both 2.6); `<3` because an aiida-core major
+    bump would likely break plugin APIs. (aiida-pythonjob independently requires
+    `>=2.7.1`, enforced by the resolver — we don't restate it.)
+  - `aiida-pythonjob~=0.5.2` — pre-1.0 alpha, no documented stability policy;
+    minor releases evolve the API, so pin to the tested 0.5.x series.
+  - `euphonic~=2.0` (SemVer-compliant), except aarch64-Linux which uses the
+    vendored 2.0.x pre-release wheel until a 2.x aarch64-Linux wheel is
+    published on PyPI — see §6.
+  - `seekpath>=2.2.1,<3` — we call `get_explicit_k_path_orig_cell` (preferred over
+    the older path helper) and want 2.2.1's bugfixes/compat fixes. This coincides
+    with Euphonic's pin (pace-neutrons/Euphonic#457) but is set for our own
+    reasons, not to track Euphonic.
+  - Dev: `pytest`, `ruff` (AiiDA fixtures come from `aiida.tools.pytest_fixtures`;
+    the SQLite backend means no `pgtest`/PostgreSQL is required).
 
 ---
 
@@ -206,11 +221,11 @@ only used on aarch64; every other platform (x86-64 CI) resolves from PyPI:
 
 ```toml
 [project]
-dependencies = ["euphonic>=1.6.1", "aiida-core", "aiida-pythonjob"]
+dependencies = ["euphonic~=2.0", "aiida-core", "aiida-pythonjob"]
 
 [tool.uv.sources]
 euphonic = [
-  { path = "wheels/euphonic-1.6.1+57.g3ba1eba-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
+  { path = "wheels/euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
     marker = "platform_machine == 'aarch64'" },
 ]
 ```
@@ -319,9 +334,9 @@ euphonic = [
   compare the AiiDA-wrapped result against a direct public-API Euphonic call.
   Tolerances (`rtol=1e-3, atol=0.05 meV`) absorb eigensolver noise on
   near-degenerate acoustic modes between the in-process and subprocess runs.
-- **Euphonic version skew**: aarch64 dev uses the vendored wheel (1.6.1); x86-64
-  CI resolves euphonic 2.0.0 from PyPI. Core public API used here is stable
-  across both; revisit if CI surfaces differences.
+- **Euphonic version skew**: aarch64 dev uses the vendored 2.0.1.dev1 wheel;
+  x86-64 CI resolves euphonic 2.0.0 from PyPI. Both are 2.x, so the public API
+  matches; revisit if CI surfaces differences.
 - **Test data**: `tests/data/quartz.castep_bin` copied from the Euphonic test
   suite (canonical example material).
 

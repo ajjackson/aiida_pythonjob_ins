@@ -12,19 +12,39 @@ name = "aiida-pythonjob-ins"
 version = "0.1.0"
 description = "Proof-of-concept AiiDA plugin wrapping INS Python libraries (Euphonic first) via aiida-pythonjob."
 readme = "README.md"
-requires-python = "==3.12.*"  # Pinned by the provided Euphonic aarch64 wheel (cp312).
-license = { text = "MIT" }
+# Pinned so ajjackson can use a local aarch64 wheel (cp312); this can be relaxed
+# once ARM-Linux builds are available on PyPI
+requires-python = "==3.12.*"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+# Bounds reflect *our own* API usage, not sibling dependencies' constraints (the
+# resolver intersects everyone's requirements). Upper caps are used only where
+# individually justified, to avoid needless conflicts with co-installed plugins.
 dependencies = [
+    # aiida-core: we use aiida.orm/engine plus the SQLite test backend and
+    # `aiida.tools.pytest_fixtures` (both added in 2.6). Cap at the next major, as
+    # an aiida-core 3.0 would likely break plugin APIs. (aiida-pythonjob
+    # independently requires >=2.7.1, which the resolver enforces on top.)
     "aiida-core>=2.6,<3",
     # aiida-pythonjob: run plain Python functions as AiiDA jobs (Python-API model).
     # https://github.com/aiidateam/aiida-pythonjob
-    "aiida-pythonjob>=0.2",
-    # Euphonic: phonon/lattice-dynamics from force constants.
-    # https://euphonic.readthedocs.io  (aarch64 wheel vendored locally, see below)
-    "euphonic>=1.6.1",
-    # seekpath: high-symmetry band paths (public dependency also used by Euphonic).
-    # https://seekpath.readthedocs.io
-    "seekpath",
+    # Pre-1.0 and classified "Development Status :: 3 - Alpha" with no documented
+    # SemVer/stability policy; minor (0.x) releases have evolved the API, so pin to
+    # the tested 0.5.x series.
+    "aiida-pythonjob~=0.5.2",
+    # Euphonic: phonon/lattice-dynamics from force constants (SemVer-compliant).
+    # https://euphonic.readthedocs.io
+    # Pinned to 2.x everywhere EXCEPT aarch64-Linux, where PyPI has no 2.x wheel
+    # yet; there we use a vendored 2.0.x pre-release wheel (see [tool.uv.sources]).
+    # Drop the second entry once an aarch64-Linux euphonic 2.x wheel is published.
+    "euphonic~=2.0; platform_machine != 'aarch64'",
+    "euphonic; platform_machine == 'aarch64'",
+    # seekpath: we call `get_explicit_k_path_orig_cell` (the *_orig_cell path is
+    # almost always preferable to the older get_*_path). 2.2.1 also carries
+    # significant bugfixes and compatibility fixes. This matches Euphonic's own
+    # pin (see https://github.com/pace-neutrons/Euphonic/pull/457), but for our
+    # own reasons, not merely to track it. https://seekpath.readthedocs.io
+    "seekpath>=2.2.1,<3",
 ]
 
 [project.optional-dependencies]
@@ -48,13 +68,14 @@ dev = [
 [project.entry-points."aiida.workflows"]
 "pythonjob_ins.dispersion" = "aiida_pythonjob_ins.workflows.dispersion:DispersionWorkChain"
 
-# --- Euphonic wheel workaround (aarch64 only) ----------------------------------
-# There is no aarch64 Euphonic wheel on PyPI yet. On aarch64 we point uv at the
+# --- Euphonic wheel workaround (aarch64-Linux only) ----------------------------
+# There is no aarch64-Linux Euphonic wheel on PyPI yet (2.0.0 ships x86-64 Linux,
+# macOS arm64, and Windows wheels only). On aarch64-Linux we point uv at the
 # vendored wheel; on any other platform (e.g. x86-64 CI) this source is skipped
-# and euphonic resolves from PyPI. Delete this block once aarch64 wheels ship.
+# and euphonic resolves from PyPI. Delete this block once aarch64-Linux wheels ship.
 [tool.uv.sources]
 euphonic = [
-    { path = "wheels/euphonic-1.6.1+57.g3ba1eba-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", marker = "platform_machine == 'aarch64'" },
+    { path = "wheels/euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", marker = "platform_machine == 'aarch64'" },
 ]
 
 [tool.pytest.ini_options]
