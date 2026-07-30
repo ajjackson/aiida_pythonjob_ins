@@ -50,9 +50,12 @@ dependency entry and the `[tool.uv.sources]` block.
   (seekpath; structure only), `read_force_constants_from_castep` and
   `interpolate_phonon_modes` (plus a `calculate_dispersion` convenience). The
   compute-heavy read/interpolate ops run as `aiida-pythonjob` `PythonJob`s.
-- **Workflow**: `DispersionWorkChain` chains two PythonJobs (read force constants,
-  interpolate modes) with three `calcfunction`s (extract structure, build q-point
-  path, compose `BandsData`), with full provenance.
+- **Workflows**:
+  - `DispersionWorkChain` chains two PythonJobs (read force constants, interpolate
+    modes) with three `calcfunction`s (extract structure, build q-point path,
+    compose `BandsData`), with full provenance.
+  - `DosWorkChain` reads force constants then computes a phonon density of states
+    (Monkhorst-Pack sampling + adaptive broadening) as a native `XyData`.
 
 ## Usage sketch
 

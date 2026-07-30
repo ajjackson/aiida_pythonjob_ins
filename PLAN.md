@@ -165,6 +165,9 @@ Pure Python functions live in `operations.py` (AiiDA-free import chain); the
 3. (later) `calculate_dos`, `structure_factor`, etc.
 
 ### 3.3 Composition (`aiida_pythonjob_ins.workflows`)
+Current workflows: `DispersionWorkChain` (band structure -> `BandsData`) and
+`DosWorkChain` (phonon DOS -> `XyData`), both reading force constants first.
+
 - A `WorkChain` (or `aiida-workgraph` graph) that chains
   `read_force_constants → calculate_dispersion` and returns the band structure.
 - Demonstrates provenance across multiple PythonJob steps.
@@ -279,6 +282,7 @@ AiiDA `Data` nodes <-> non-AiiDA objects (the boundary the bridge handles):
 | `StructureData` (built-in) | `crystal_to_structure()` / `structure_to_crystal()` (single source of truth); `to_structure()` (via `CrystalStructureMixin`); `structure_to_spglib_cell()` (reuses euphonic `Crystal.to_spglib_cell`) | `euphonic.Crystal`; spglib cell tuple |
 | `KpointsData` (built-in) | `qpoints_to_kpoints_data(qpts, cell, labels)` (produce); the reverse (KpointsData -> q-points array) is the pythonjob deserializer `serialization.kpoints_data_to_qpoints`, = `.get_kpoints()` | `ndarray` q-points (+ labels, cell); `band_path_qpoints` returns these as a `QpointPath` NamedTuple |
 | `BandsData` (built-in) | `QpointPhononModesData.to_bands(kpoints=None)` (compose, one-way; via `modes_to_bands_data`; validates the path against the modes) | `euphonic.QpointPhononModes` (+ optional `KpointsData` for labels) |
+| `XyData` (built-in) | `spectrum1d_to_xydata()` (uses `get_bin_centres()`); serializer `serialization.spectrum1d_to_xydata_node` | `euphonic.Spectrum1D` (e.g. a phonon DOS) |
 | `SinglefileData` (built-in) | `upload_files` staging; read by basename in the job | a `.castep_bin` file on disk |
 | `Float`, `Str` (built-in) | aiida-pythonjob builtin serializers (automatic) | Python `float` (`q_spacing`), `str` (`filename`) |
 
@@ -336,7 +340,8 @@ aiida_pythonjob_ins/
 │       ├── pythonjobs.py         # prepare_*_inputs (aiida-pythonjob wrappers)
 │       └── workflows/
 │           ├── __init__.py
-│           └── dispersion.py       # WorkChain (calcfunctions + PythonJobs)
+│           ├── dispersion.py       # DispersionWorkChain (calcfunctions + PythonJobs)
+│           └── dos.py              # DosWorkChain (read FC -> phonon DOS -> XyData)
 └── tests/
     ├── conftest.py                 # enable aiida pytest fixtures
     ├── data/                       # reference inputs (from Euphonic /inspect)
@@ -355,9 +360,9 @@ aiida_pythonjob_ins/
 "pythonjob_ins.force_constants" = "aiida_pythonjob_ins.data.force_constants:ForceConstantsData"
 "pythonjob_ins.qpoint_phonon_modes" = "aiida_pythonjob_ins.data.qpoint_phonon_modes:QpointPhononModesData"
 
-# Calculations/workflows exposed as needed once implemented, e.g.:
-# [project.entry-points."aiida.workflows"]
-# "pythonjob_ins.dispersion" = "aiida_pythonjob_ins.workflows.dispersion:DispersionWorkChain"
+[project.entry-points."aiida.workflows"]
+"pythonjob_ins.dispersion" = "aiida_pythonjob_ins.workflows.dispersion:DispersionWorkChain"
+"pythonjob_ins.dos" = "aiida_pythonjob_ins.workflows.dos:DosWorkChain"
 ```
 
 ---
@@ -438,6 +443,25 @@ euphonic = [
 6. [x] **Docs**: README with setup, wheel note, and usage example.
 7. [ ] **Future**: add `abinslib`, then `resins` wrappers as new op/data modules,
    reusing the same PythonJob + Data-type patterns.
+
+## 10. Applications & visual-docs roadmap
+
+Expanding the exemplar with more applications and Sphinx docs (gallery + autoapi,
+modelled on abinslib: furo theme, `sphinx-autoapi`, `sphinx-gallery`, myst).
+
+1. [x] **Phonon DOS**: `operations.calculate_dos` (MP-grid sampling, target
+   `q_spacing`, adaptive broadening), `conversions.spectrum1d_to_xydata`
+   (`Spectrum1D` -> `XyData`), `pythonjobs.prepare_dos_inputs`, `DosWorkChain`;
+   tests across ops/conversions/workflows.
+2. [ ] **Phonopy input**: `read_force_constants_from_phonopy` (relies on euphonic's
+   `phonopy-reader` extra), test data `tests/data/phonopy/NaCl_default/`; reuses
+   the dispersion + DOS workflows unchanged.
+3. [ ] **Docs scaffold**: `docs/` (autoapi + gallery + furo, abinslib palette),
+   `doc` dependency group, `build-docs.yml` (GitHub Pages), a shared gallery
+   helper that loads a temporary SQLite profile + localhost code.
+4. [ ] **Gallery tutorials**: runnable `plot_*.py` examples (quartz CASTEP
+   dispersion; NaCl phonopy bands + DOS) rendering result plots *and* AiiDA
+   provenance graphs (Graphviz). Requires `graphviz` + `procps` in the docs env.
 
 ### Implementation notes / decisions made
 

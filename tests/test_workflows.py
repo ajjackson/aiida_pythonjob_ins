@@ -1,4 +1,4 @@
-"""End-to-end test for the dispersion WorkChain."""
+"""End-to-end tests for the WorkChains."""
 
 from __future__ import annotations
 
@@ -10,10 +10,11 @@ from aiida.orm import (
     KpointsData,
     SinglefileData,
     StructureData,
+    XyData,
 )
 
 from aiida_pythonjob_ins.data import QpointPhononModesData
-from aiida_pythonjob_ins.workflows import DispersionWorkChain
+from aiida_pythonjob_ins.workflows import DispersionWorkChain, DosWorkChain
 
 
 def test_dispersion_workchain(python_code, quartz_castep_bin):
@@ -55,5 +56,30 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
 
     # Two PythonJob CalcJobs (read + interpolate) were orchestrated; the band path
     # and band-structure steps are calcfunctions, not CalcJobs.
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert len(calcjobs) == 2
+
+
+def test_dos_workchain(python_code, quartz_castep_bin):
+    """Read force constants -> phonon DOS as XyData."""
+    castep_file = SinglefileData(str(quartz_castep_bin))
+
+    results, node = run_get_node(
+        DosWorkChain,
+        castep_file=castep_file,
+        q_spacing=Float(0.5),  # coarse grid keeps the test fast
+        energy_spacing=Float(2.0),
+        code=python_code,
+    )
+
+    assert node.is_finished_ok, node.exit_status
+    dos = results["dos"]
+    assert isinstance(dos, XyData)
+    _, energy, _ = dos.get_x()
+    ((_, values, _),) = dos.get_y()
+    assert len(energy) == len(values)
+    assert (values >= 0).all()
+
+    # read + dos, both PythonJobs
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
     assert len(calcjobs) == 2

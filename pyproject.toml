@@ -68,6 +68,7 @@ dev = [
 
 [project.entry-points."aiida.workflows"]
 "pythonjob_ins.dispersion" = "aiida_pythonjob_ins.workflows.dispersion:DispersionWorkChain"
+"pythonjob_ins.dos" = "aiida_pythonjob_ins.workflows.dos:DosWorkChain"
 
 # --- Euphonic wheel workaround (aarch64-Linux only) ----------------------------
 # There is no aarch64-Linux Euphonic wheel on PyPI yet (2.0.0 ships x86-64 Linux,

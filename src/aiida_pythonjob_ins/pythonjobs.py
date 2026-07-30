@@ -30,6 +30,7 @@ from aiida_pythonjob import prepare_pythonjob_inputs
 from aiida_pythonjob_ins.operations import (
     band_path_qpoints,
     calculate_dispersion,
+    calculate_dos,
     interpolate_phonon_modes,
     read_force_constants_from_castep,
 )
@@ -41,8 +42,10 @@ from aiida_pythonjob_ins.serialization import (
 __all__ = [
     "band_path_qpoints",
     "calculate_dispersion",
+    "calculate_dos",
     "interpolate_phonon_modes",
     "prepare_dispersion_inputs",
+    "prepare_dos_inputs",
     "prepare_interpolation_inputs",
     "prepare_read_force_constants_inputs",
     "read_force_constants_from_castep",
@@ -138,6 +141,36 @@ def prepare_dispersion_inputs(
         function=calculate_dispersion,
         function_inputs={"force_constants": force_constants, "q_spacing": q_spacing},
         # Teach PythonJob how to move our custom Data <-> Euphonic objects.
+        serializers=EUPHONIC_SERIALIZERS,
+        deserializers=EUPHONIC_DESERIALIZERS,
+        computer=computer,
+        code=code,
+        **kwargs,
+    )
+
+
+def prepare_dos_inputs(
+    force_constants: orm.Data,
+    q_spacing: float = 0.1,
+    energy_spacing: float = 1.0,
+    *,
+    computer: str | orm.Computer = "localhost",
+    code: orm.AbstractCode | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Build inputs to run :func:`calculate_dos` as a PythonJob.
+
+    ``q_spacing`` is the target Monkhorst-Pack grid spacing (1/Angstrom) and
+    ``energy_spacing`` the DOS bin width (meV). The returned euphonic ``Spectrum1D``
+    is serialized to a native ``XyData``.
+    """
+    return prepare_pythonjob_inputs(
+        function=calculate_dos,
+        function_inputs={
+            "force_constants": force_constants,
+            "q_spacing": q_spacing,
+            "energy_spacing": energy_spacing,
+        },
         serializers=EUPHONIC_SERIALIZERS,
         deserializers=EUPHONIC_DESERIALIZERS,
         computer=computer,

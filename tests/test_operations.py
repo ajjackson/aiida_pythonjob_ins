@@ -6,15 +6,20 @@ import logging
 
 import numpy as np
 from aiida.engine import run_get_node
+from aiida.orm import XyData
 from aiida_pythonjob import PythonJob
-from euphonic import ForceConstants
+from euphonic import ForceConstants, Spectrum1D
 
 from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
 from aiida_pythonjob_ins.operations import (
     calculate_dispersion,
+    calculate_dos,
     read_force_constants_from_castep,
 )
-from aiida_pythonjob_ins.pythonjobs import prepare_dispersion_inputs
+from aiida_pythonjob_ins.pythonjobs import (
+    prepare_dispersion_inputs,
+    prepare_dos_inputs,
+)
 
 OPS_LOGGER = "aiida_pythonjob_ins.operations"
 
@@ -74,3 +79,31 @@ def test_dispersion_pythonjob_matches_direct_call(python_code, quartz_castep_bin
         rtol=1e-3,
         atol=0.05,  # meV
     )
+
+
+def test_calculate_dos_pure_function(quartz_castep_bin):
+    """The plain DOS function returns a Spectrum1D with matching x/y lengths."""
+    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    dos = calculate_dos(force_constants, q_spacing=0.5, energy_spacing=2.0)
+
+    assert isinstance(dos, Spectrum1D)
+    # Histogram-like: x holds bin edges, get_bin_centres() matches y.
+    assert len(dos.get_bin_centres()) == len(dos.y_data)
+    assert (dos.y_data.magnitude >= 0).all()
+
+
+def test_dos_pythonjob_returns_xydata(python_code, quartz_castep_bin):
+    """Running the DOS op via PythonJob yields a native XyData."""
+    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    fc_node = ForceConstantsData(force_constants)
+    inputs = prepare_dos_inputs(
+        fc_node, q_spacing=0.5, energy_spacing=2.0, code=python_code
+    )
+    results, node = run_get_node(PythonJob, **inputs)
+
+    assert node.is_finished_ok, node.exit_status
+    dos_node = results["result"]
+    assert isinstance(dos_node, XyData)
+    _, energy, _ = dos_node.get_x()
+    ((_, dos_values, _),) = dos_node.get_y()
+    assert len(energy) == len(dos_values)

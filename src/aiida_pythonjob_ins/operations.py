@@ -30,7 +30,8 @@ import seekpath
 
 # Imported at module level (not under TYPE_CHECKING) because aiida-pythonjob
 # resolves the function's type hints at runtime via ``typing.get_type_hints``.
-from euphonic import ForceConstants, QpointPhononModes
+from euphonic import ForceConstants, QpointPhononModes, Spectrum1D, ureg
+from euphonic.util import mode_gradients_to_widths, mp_grid
 
 # Library code only *emits* logs; it never configures handlers or levels -- the
 # host application (or AiiDA) decides how these are surfaced. When these functions
@@ -156,3 +157,62 @@ def calculate_dispersion(
         force_constants.crystal.to_spglib_cell(), q_spacing, insert_gamma=insert_gamma
     )
     return interpolate_phonon_modes(force_constants, path.qpoints, asr=asr)
+
+
+def calculate_dos(
+    force_constants: ForceConstants,
+    q_spacing: float = 0.1,
+    energy_spacing: float = 1.0,
+    *,
+    energy_unit: str = "meV",
+    adaptive: bool = True,
+    asr: str | None = "reciprocal",
+) -> Spectrum1D:
+    """Compute a phonon density of states by sampling a Monkhorst-Pack grid.
+
+    Parameters
+    ----------
+    force_constants
+        Interatomic force constants to interpolate from.
+    q_spacing
+        Target spacing of the sampling grid, in 1/Angstrom (finer -> denser grid).
+    energy_spacing
+        Width of the DOS energy bins, in ``energy_unit``.
+    energy_unit
+        Unit for the energy axis (e.g. ``"meV"``, ``"1/cm"``).
+    adaptive
+        Use adaptive broadening (per-mode widths from mode gradients) rather than
+        fixed bins. Recommended; requires computing mode gradients.
+    asr
+        Acoustic sum rule applied during interpolation (``None`` to disable).
+
+    Returns
+    -------
+    Spectrum1D
+        Density of states vs energy (bin edges in ``x_data``, values in
+        ``y_data``; use ``get_bin_centres()`` for matching x/y lengths).
+    """
+    grid = force_constants.crystal.get_mp_grid_spec(
+        spacing=q_spacing * ureg("1/angstrom")
+    )
+    qpts = mp_grid(grid)
+    LOGGER.info(
+        "Sampling DOS: %dx%dx%d grid (%d q-points), adaptive=%s",
+        *grid,
+        len(qpts),
+        adaptive,
+    )
+    result = force_constants.calculate_qpoint_phonon_modes(
+        qpts, asr=asr, return_mode_gradients=adaptive
+    )
+    if adaptive:
+        modes, mode_gradients = result
+        mode_widths = mode_gradients_to_widths(
+            mode_gradients, force_constants.crystal.cell_vectors
+        )
+    else:
+        modes, mode_widths = result, None
+
+    emax = modes.frequencies.max().to(energy_unit).magnitude
+    dos_bins = np.arange(0.0, emax + energy_spacing, energy_spacing) * ureg(energy_unit)
+    return modes.calculate_dos(dos_bins, mode_widths=mode_widths)

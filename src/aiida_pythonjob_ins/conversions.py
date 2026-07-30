@@ -34,7 +34,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from aiida.orm import BandsData, KpointsData, StructureData
+from aiida.orm import BandsData, KpointsData, StructureData, XyData
 from euphonic import Crystal, ureg
 
 
@@ -99,6 +99,23 @@ def qpoints_to_kpoints_data(
     kpoints.set_cell(np.asarray(cell))
     kpoints.set_kpoints(np.asarray(qpoints), cartesian=False, labels=labels)
     return kpoints
+
+
+def spectrum1d_to_xydata(spectrum: Any) -> XyData:
+    """Convert a Euphonic ``Spectrum1D`` (e.g. a DOS) to a native ``XyData``.
+
+    Uses ``get_bin_centres()`` so the x and y arrays have matching lengths
+    (``Spectrum1D`` stores bin *edges* in ``x_data`` when it is histogram-like).
+    Unit labels are recorded on the ``XyData`` arrays.
+    """
+    x_values = spectrum.get_bin_centres().magnitude
+    x_unit = f"{spectrum.x_data.units:~}"
+    y_unit = f"{spectrum.y_data.units:~}"
+
+    xy = XyData()
+    xy.set_x(x_values, "energy", x_unit)
+    xy.set_y(spectrum.y_data.magnitude, "density_of_states", y_unit)
+    return xy
 
 
 def modes_to_bands_data(

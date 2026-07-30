@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 from aiida.orm import KpointsData, Node
 
+from .conversions import spectrum1d_to_xydata
 from .data import ForceConstantsData, QpointPhononModesData
 
 # See PLAN.md §3.6-§3.7 for the full (de)serialization model and conversion map.
@@ -33,6 +34,10 @@ EUPHONIC_SERIALIZERS: dict[str, str] = {
     ),
     "euphonic.qpoint_phonon_modes.QpointPhononModes": (
         "aiida_pythonjob_ins.data.qpoint_phonon_modes.QpointPhononModesData"
+    ),
+    # A DOS (or other Spectrum1D) becomes a native XyData.
+    "euphonic.spectra.base.Spectrum1D": (
+        "aiida_pythonjob_ins.serialization.spectrum1d_to_xydata_node"
     ),
 }
 
@@ -54,6 +59,11 @@ EUPHONIC_DESERIALIZERS: dict[str, str] = {
 def kpoints_data_to_qpoints(node: KpointsData) -> np.ndarray:
     """Deserializer: KpointsData node -> fractional q-points array."""
     return node.get_kpoints()
+
+
+def spectrum1d_to_xydata_node(spectrum: Any, user: Any = None) -> Any:  # noqa: ARG001
+    """Serializer: euphonic Spectrum1D -> XyData (``user`` per the call convention)."""
+    return spectrum1d_to_xydata(spectrum)
 
 
 def force_constants_from_node(node: ForceConstantsData) -> Any:

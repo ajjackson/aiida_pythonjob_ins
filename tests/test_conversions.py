@@ -6,14 +6,18 @@ import matplotlib as mpl
 import numpy as np
 import pytest
 from aiida.engine import run_get_node
-from aiida.orm import BandsData, Float, KpointsData, StructureData
+from aiida.orm import BandsData, Float, KpointsData, StructureData, XyData
 from aiida_pythonjob import PythonJob
 from euphonic import ForceConstants
 
-from aiida_pythonjob_ins.conversions import qpoints_to_kpoints_data
+from aiida_pythonjob_ins.conversions import (
+    qpoints_to_kpoints_data,
+    spectrum1d_to_xydata,
+)
 from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
 from aiida_pythonjob_ins.operations import (
     calculate_dispersion,
+    calculate_dos,
     interpolate_phonon_modes,
 )
 from aiida_pythonjob_ins.pythonjobs import prepare_interpolation_inputs
@@ -95,6 +99,19 @@ def test_modes_to_bands_validates_mismatched_kpoints(aiida_profile, quartz_caste
     )
     with pytest.raises(ValueError, match="do not match"):
         node.to_bands(wrong)
+
+
+def test_spectrum1d_to_xydata(aiida_profile, quartz_castep_bin):
+    """A Euphonic DOS Spectrum1D maps to an XyData with matching x/y lengths."""
+    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    dos = calculate_dos(force_constants, q_spacing=0.5, energy_spacing=2.0)
+
+    xy = spectrum1d_to_xydata(dos)
+    assert isinstance(xy, XyData)
+    _, energy, _ = xy.get_x()
+    ((_, values, _),) = xy.get_y()
+    np.testing.assert_allclose(energy, dos.get_bin_centres().magnitude)
+    np.testing.assert_allclose(values, dos.y_data.magnitude)
 
 
 def test_bandsdata_matplotlib_export(aiida_profile, quartz_castep_bin, tmp_path):
