@@ -315,6 +315,13 @@ euphonic = [
   single `result` output -> `KpointsData`.
 - **procps in the image**: added `procps` to the repo `Containerfile` so fresh
   dev containers have `ps` for AiiDA's DirectScheduler (was a manual install).
+- **Logging (not print)**: the atomic ops use a module `logging` logger
+  (`euphonic_ops.LOGGER`) with lazy `%`-style messages; the `T20` ruff rule bans
+  stray `print`. Library code only *emits* logs (never configures handlers/levels),
+  so INFO messages surface only when the host/AiiDA enables them; inside a
+  PythonJob they are not shown at INFO by default (Python's default surfaces only
+  WARNING+ to stderr). A `caplog` test (`test_operations_emit_logs`) verifies
+  emission. WorkChains should use `self.report(...)` for step-level messages.
 - **Build backend**: `uv_build` (uv's native backend) for consistency with the
   uv-based workflow; `setuptools` is the conservative "established standard"
   alternative. The distribution (`aiida-pythonjob-ins`) normalizes to the import

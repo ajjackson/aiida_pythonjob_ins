@@ -16,6 +16,8 @@ without relying on Euphonic's private ``_bands_from_force_constants`` helper:
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import seekpath
 
@@ -25,6 +27,12 @@ from euphonic import ForceConstants, QpointPhononModes
 
 from aiida_pythonjob_ins.qpoint_path import QpointPath
 
+# Library code only *emits* logs; it never configures handlers or levels -- the
+# host application (or AiiDA) decides how these are surfaced. When these functions
+# run inside a PythonJob, their stdout/stderr are captured into the job's retrieved
+# files, so configured logging is preserved in provenance.
+LOGGER = logging.getLogger(__name__)
+
 
 def read_force_constants_from_castep(filename: str) -> ForceConstants:
     """Read a CASTEP ``.castep_bin``/``.check`` file into ``ForceConstants``.
@@ -33,6 +41,7 @@ def read_force_constants_from_castep(filename: str) -> ForceConstants:
     PythonJob the CASTEP file is staged there via ``upload_files`` (see
     :func:`aiida_pythonjob_ins.calculations.prepare_read_force_constants_inputs`).
     """
+    LOGGER.info("Reading force constants from CASTEP file: %s", filename)
     return ForceConstants.from_castep(filename)
 
 
@@ -82,6 +91,11 @@ def generate_qpoint_path(
     """
     qpts, labels = _seekpath_qpoints(force_constants, q_spacing, insert_gamma)
     cell = force_constants.crystal.cell_vectors.to("angstrom").magnitude
+    LOGGER.info(
+        "Generated band path: %d q-points, %d high-symmetry points",
+        len(qpts),
+        len(labels),
+    )
     return QpointPath(qpoints=qpts, labels=labels, cell=cell)
 
 
@@ -97,9 +111,15 @@ def interpolate_phonon_modes(
     provided by an AiiDA ``KpointsData``). This is the core
     ``ForceConstants -> QpointPhononModes`` step.
     """
+    qpoints = np.asarray(qpoints)
+    LOGGER.info(
+        "Computing phonon modes: %d modes across %d q-points",
+        force_constants.crystal.n_atoms * 3,
+        len(qpoints),
+    )
     # reduce_qpts=False keeps every q-point on the explicit path (matches CLI).
     return force_constants.calculate_qpoint_phonon_modes(
-        np.asarray(qpoints), asr=asr, reduce_qpts=False
+        qpoints, asr=asr, reduce_qpts=False
     )
 
 
