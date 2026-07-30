@@ -10,7 +10,6 @@ https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/plugins.html#t
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -29,8 +28,14 @@ import pytest
 # ``AIIDA_PATH`` to locate (and create) its ``.aiida`` config directory, so we set
 # it to a fresh temp dir first, then create an empty config there. The
 # ``aiida_profile`` fixtures still provide isolated, temporary profiles on top.
-_AIIDA_CONFIG_DIR = tempfile.mkdtemp(prefix="aiida-test-config-")
-os.environ["AIIDA_PATH"] = _AIIDA_CONFIG_DIR
+#
+# ``TemporaryDirectory`` cleans itself up: explicitly via ``pytest_unconfigure``
+# below, and as a safety net via its finalizer at interpreter exit. Keeping a
+# module-level reference stops it being GC'd (and deleted) mid-session.
+_AIIDA_CONFIG_TMPDIR = tempfile.TemporaryDirectory(
+    prefix="aiida-test-config-", ignore_cleanup_errors=True
+)
+os.environ["AIIDA_PATH"] = _AIIDA_CONFIG_TMPDIR.name
 
 from aiida.manage.configuration import get_config  # noqa: E402
 
@@ -39,7 +44,7 @@ get_config(create=True)
 
 def pytest_unconfigure(config):
     """Remove the ephemeral AiiDA config directory at the end of the session."""
-    shutil.rmtree(_AIIDA_CONFIG_DIR, ignore_errors=True)
+    _AIIDA_CONFIG_TMPDIR.cleanup()
 
 
 pytest_plugins = ["aiida.tools.pytest_fixtures"]
