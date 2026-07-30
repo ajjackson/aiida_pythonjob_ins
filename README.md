@@ -85,6 +85,30 @@ spectrum = modes.get_dispersion()            # euphonic.Spectrum1D
 
 See `tests/` for runnable examples using the official AiiDA pytest fixtures.
 
+## Logging
+
+The atomic operations emit progress messages through the standard `logging`
+module under the `aiida_pythonjob_ins` logger namespace. As a library, this
+package only *emits* logs; it never installs handlers or sets levels, so you
+control verbosity from your application:
+
+```python
+import logging
+
+# Show INFO-level messages from this package (basicConfig adds a stderr handler):
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("aiida_pythonjob_ins").setLevel(logging.INFO)
+```
+
+Use `logging.DEBUG` for more detail, or `logging.WARNING` (the effective default)
+to silence progress messages. Because the package logger is separate from
+AiiDA's own `aiida` logger, changing this level does not affect AiiDA's logging.
+
+When an operation runs inside a `PythonJob` (a separate process), its stdout and
+stderr are captured into the calculation's retrieved files. To have INFO logs
+appear there, raise the level inside that process — e.g. via the code's
+`prepend_text`, or AiiDA's logging configuration (`verdi config set`).
+
 ## Roadmap
 
 See [`PLAN.md`](./PLAN.md). Next: `abinslib` and `resins` wrappers reusing the
