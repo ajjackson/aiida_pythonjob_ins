@@ -8,9 +8,14 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from aiida.orm import StructureData
 from euphonic import ForceConstants
 
-from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
+from aiida_pythonjob_ins.data import (
+    EuphonicCrystalData,
+    ForceConstantsData,
+    QpointPhononModesData,
+)
 
 
 def test_force_constants_roundtrip(aiida_profile, quartz_castep_bin):
@@ -38,6 +43,30 @@ def test_force_constants_type_validation(aiida_profile):
     """Passing a non-ForceConstants object raises TypeError."""
     with pytest.raises(TypeError):
         ForceConstantsData("not a force constants object")
+
+
+def test_crystal_roundtrip_and_structure_bridge(aiida_profile, quartz_castep_bin):
+    """EuphonicCrystalData round-trips and bridges to/from StructureData."""
+    crystal = ForceConstants.from_castep(str(quartz_castep_bin)).crystal
+
+    node = EuphonicCrystalData(crystal)
+    node.store()
+    assert node.get_crystal().n_atoms == crystal.n_atoms
+
+    structure = node.to_structure()
+    assert isinstance(structure, StructureData)
+    assert len(structure.sites) == crystal.n_atoms
+    assert structure.pbc == (True, True, True)
+
+    # StructureData -> EuphonicCrystalData -> spglib cell round-trip preserves atoms
+    rebuilt = EuphonicCrystalData.from_structure(structure)
+    lattice, _positions, numbers = rebuilt.to_spglib_cell()
+    assert len(numbers) == crystal.n_atoms
+    np.testing.assert_allclose(
+        np.asarray(lattice),
+        crystal.cell_vectors.to("angstrom").magnitude,
+        rtol=1e-6,
+    )
 
 
 def test_qpoint_phonon_modes_roundtrip(aiida_profile, quartz_castep_bin):

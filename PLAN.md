@@ -135,11 +135,17 @@ Wrap Euphonic objects that move between steps. Euphonic objects expose public
     Euphonic's public readers.
 - **`QpointPhononModesData`**
   - Stores frequencies + eigenvectors + q-points (a Euphonic `QpointPhononModes`).
-  - Methods: `set_modes(modes)`, `get_modes() -> QpointPhononModes`.
-  - Lightweight numeric arrays may additionally be surfaced via `ArrayData`-like
-    accessors for downstream inspection.
+  - Methods: `get_modes() -> QpointPhononModes`, plus `to_kpoints()`/`to_bands()`.
+- **`EuphonicCrystalData`**
+  - Wraps a Euphonic `Crystal` (cell + species + positions + masses). It is the
+    single home for `Crystal <-> StructureData` conversion: `to_structure()`,
+    `from_structure(structure)`, and `to_spglib_cell()` (delegating to euphonic).
 
-Registered under the `aiida.data` entry-point group (see §5).
+All three are JSON-backed by the shared `EuphonicJSONData` base and registered
+under the `aiida.data` entry-point group (see §5). `to_structure()` comes from the
+opt-in `CrystalStructureMixin` (see `data/mixins.py`) for the crystal-bearing
+types (`ForceConstantsData`, `QpointPhononModesData`); `EuphonicCrystalData`
+defines it directly since it *is* the crystal.
 
 > Note for `aiida-pythonjob`: PythonJob serializes function inputs/outputs. Verify
 > whether custom Data types need registered serializers/deserializers for
@@ -266,8 +272,9 @@ AiiDA `Data` nodes <-> non-AiiDA objects (the boundary the bridge handles):
 |---|---|---|
 | `ForceConstantsData` (custom) | `ForceConstantsData(fc)` / `.get_force_constants()`; serializer/deserializer; `.from_castep(path)` | `euphonic.ForceConstants` (or a `.castep_bin` file) |
 | `QpointPhononModesData` (custom) | `QpointPhononModesData(modes)` / `.get_modes()`; serializer/deserializer | `euphonic.QpointPhononModes` |
-| `StructureData` (built-in) | `to_structure()` (via `CrystalStructureMixin`, mixed into crystal-bearing Data classes; native, no ASE); `structure_to_spglib_cell()` | `euphonic.Crystal` (cell + symbols + positions); spglib cell tuple |
-| `KpointsData` (built-in) | `qpoints_to_kpoints_data(qpts, cell, labels)` / `kpoints_data_to_qpoints()` (= `.get_kpoints()`) | `ndarray` q-points (+ labels, cell); `band_path_qpoints` returns these as a `QpointPath` NamedTuple |
+| `EuphonicCrystalData` (custom) | `EuphonicCrystalData(crystal)` / `.get_crystal()`; `.from_structure()` / `.to_structure()`; `.to_spglib_cell()` | `euphonic.Crystal`; `StructureData`; spglib cell tuple |
+| `StructureData` (built-in) | `crystal_to_structure()` / `structure_to_crystal()` (single source of truth); `to_structure()` (via `CrystalStructureMixin`); `structure_to_spglib_cell()` (reuses euphonic `Crystal.to_spglib_cell`) | `euphonic.Crystal`; spglib cell tuple |
+| `KpointsData` (built-in) | `qpoints_to_kpoints_data(qpts, cell, labels)` (produce); the reverse (KpointsData -> q-points array) is the pythonjob deserializer `serialization.kpoints_data_to_qpoints`, = `.get_kpoints()` | `ndarray` q-points (+ labels, cell); `band_path_qpoints` returns these as a `QpointPath` NamedTuple |
 | `BandsData` (built-in) | `QpointPhononModesData.to_bands(kpoints=None)` (compose, one-way; via `modes_to_bands_data`; validates the path against the modes) | `euphonic.QpointPhononModes` (+ optional `KpointsData` for labels) |
 | `SinglefileData` (built-in) | `upload_files` staging; read by basename in the job | a `.castep_bin` file on disk |
 | `Float`, `Str` (built-in) | aiida-pythonjob builtin serializers (automatic) | Python `float` (`q_spacing`), `str` (`filename`) |
@@ -317,6 +324,7 @@ aiida_pythonjob_ins/
 │       │   ├── __init__.py
 │       │   ├── base.py               # EuphonicJSONData (JSON-in-repository storage)
 │       │   ├── mixins.py             # CrystalStructureMixin, SupportsToStructure
+│       │   ├── crystal.py            # EuphonicCrystalData (Crystal <-> StructureData)
 │       │   ├── force_constants.py
 │       │   └── qpoint_phonon_modes.py
 │       ├── calculations/
@@ -339,6 +347,7 @@ aiida_pythonjob_ins/
 
 ```toml
 [project.entry-points."aiida.data"]
+"pythonjob_ins.crystal" = "aiida_pythonjob_ins.data.crystal:EuphonicCrystalData"
 "pythonjob_ins.force_constants" = "aiida_pythonjob_ins.data.force_constants:ForceConstantsData"
 "pythonjob_ins.qpoint_phonon_modes" = "aiida_pythonjob_ins.data.qpoint_phonon_modes:QpointPhononModesData"
 

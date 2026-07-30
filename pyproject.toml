@@ -62,6 +62,7 @@ dev = [
 # AiiDA discovers plugins via entry points; see
 # https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/plugins.html
 [project.entry-points."aiida.data"]
+"pythonjob_ins.crystal" = "aiida_pythonjob_ins.data.crystal:EuphonicCrystalData"
 "pythonjob_ins.force_constants" = "aiida_pythonjob_ins.data.force_constants:ForceConstantsData"
 "pythonjob_ins.qpoint_phonon_modes" = "aiida_pythonjob_ins.data.qpoint_phonon_modes:QpointPhononModesData"
 

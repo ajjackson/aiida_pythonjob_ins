@@ -20,7 +20,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from aiida.orm import Node
+import numpy as np
+from aiida.orm import KpointsData, Node
 
 from .data import ForceConstantsData, QpointPhononModesData
 
@@ -45,9 +46,14 @@ EUPHONIC_DESERIALIZERS: dict[str, str] = {
     ),
     # A KpointsData input to the interpolation op deserializes to a q-points array.
     "aiida.orm.nodes.data.array.kpoints.KpointsData": (
-        "aiida_pythonjob_ins.conversions.kpoints_data_to_qpoints"
+        "aiida_pythonjob_ins.serialization.kpoints_data_to_qpoints"
     ),
 }
+
+
+def kpoints_data_to_qpoints(node: KpointsData) -> np.ndarray:
+    """Deserializer: KpointsData node -> fractional q-points array."""
+    return node.get_kpoints()
 
 
 def force_constants_from_node(node: ForceConstantsData) -> Any:

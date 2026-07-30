@@ -15,10 +15,7 @@ from aiida_pythonjob_ins.calculations import (
     interpolate_phonon_modes,
     prepare_interpolation_inputs,
 )
-from aiida_pythonjob_ins.conversions import (
-    kpoints_data_to_qpoints,
-    qpoints_to_kpoints_data,
-)
+from aiida_pythonjob_ins.conversions import qpoints_to_kpoints_data
 from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
 from aiida_pythonjob_ins.workflows.dispersion import (
     extract_structure,
@@ -33,7 +30,7 @@ def test_kpoints_roundtrip(aiida_profile):
     labels = [(0, "\u0393"), (2, "M")]
 
     kpoints = qpoints_to_kpoints_data(qpts, cell, labels=labels)
-    np.testing.assert_allclose(kpoints_data_to_qpoints(kpoints), qpts)
+    np.testing.assert_allclose(kpoints.get_kpoints(), qpts)
     assert kpoints.labels == labels
 
 

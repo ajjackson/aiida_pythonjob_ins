@@ -37,9 +37,10 @@ dependency entry and the `[tool.uv.sources]` block.
 
 ## What's implemented
 
-- **Custom data types**: `ForceConstantsData`, `QpointPhononModesData` (wrap
-  Euphonic objects via their public JSON round-trip, stored in the node
-  repository).
+- **Custom data types**: `ForceConstantsData`, `QpointPhononModesData`,
+  `EuphonicCrystalData` (wrap Euphonic objects via their public JSON round-trip,
+  stored in the node repository). `EuphonicCrystalData` bridges euphonic's
+  `Crystal` to/from AiiDA's native `StructureData`.
 - **Native AiiDA types**: the force constants' crystal is exposed as a
   `StructureData` (no ASE dependency), from which a `KpointsData` band path is
   built (also the *input* q-point specification for Fourier interpolation).
