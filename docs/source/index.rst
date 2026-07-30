@@ -21,4 +21,5 @@ graph. They can be downloaded as Jupyter notebooks for experimentation.
    :caption: Contents:
 
    auto_examples/index
+   workflows
    autoapi/index

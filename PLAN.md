@@ -358,6 +358,7 @@ aiida_pythonjob_ins/
     └── source/
         ├── conf.py
         ├── index.rst
+        ├── workflows.rst           # WorkChain spec docs (aiida-workchain directive)
         ├── _static/custom.css
         └── tutorials/              # runnable gallery examples (plot_*.py)
             ├── GALLERY_HEADER.rst
@@ -494,6 +495,15 @@ modelled on abinslib: furo theme, `sphinx-autoapi`, `sphinx-gallery`, myst).
 
 ### Implementation notes / decisions made
 
+- **Documenting WorkChains**: a WorkChain's inputs/outputs are defined at runtime
+  in `define(spec)`, so static tools (autoapi) can't see them and only show the
+  outline-step methods (an implementation detail). The idiomatic AiiDA solution is
+  the `aiida.sphinxext` extension's `.. aiida-workchain::` directive, which renders
+  the real spec (inputs/outputs/exit-codes/outline) -- see `docs/source/workflows.rst`.
+  We also hide `*WorkChain` classes from autoapi (an `autoapi-skip-member` handler
+  in `conf.py`) so there's no misleading method dump. (Underscore-prefixing outline
+  methods is *not* idiomatic and wouldn't surface inputs.) The directive imports the
+  classes and calls `load_profile()`, so `conf.py` bootstraps an ephemeral profile.
 - **AiiDA test profile**: use `aiida.tools.pytest_fixtures` (not the deprecated
   `aiida.manage.tests.pytest_fixtures`); its default profile uses the SQLite
   backend, so **no PostgreSQL** is needed.

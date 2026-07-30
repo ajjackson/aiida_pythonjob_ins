@@ -7,6 +7,19 @@ https://www.sphinx-doc.org/en/master/usage/configuration.html
 """
 
 import importlib.metadata
+import os
+import tempfile
+
+# The ``aiida-workchain`` directive imports the workflow classes and calls
+# ``load_profile()``, so the build needs an AiiDA profile. Point AIIDA_PATH at a
+# throwaway dir and load an in-memory profile (never touches a real ``~/.aiida``).
+os.environ.setdefault("AIIDA_PATH", tempfile.mkdtemp(prefix="aiida-docs-config-"))
+from aiida import load_profile
+from aiida.manage.configuration import get_config
+from aiida.storage.sqlite_temp import SqliteTempBackend
+
+get_config(create=True)
+load_profile(SqliteTempBackend.create_profile("docs"), allow_switch=True)
 
 project = "aiida-pythonjob-ins"
 copyright = "2026, STFC"  # noqa: A001
@@ -20,6 +33,7 @@ extensions = [
     "myst_parser",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
+    "aiida.sphinxext",  # `.. aiida-workchain::` directive (documents the spec)
 ]
 
 templates_path = ["_templates"]
@@ -96,3 +110,21 @@ sphinx_gallery_conf = {
 # -- Napoleon (Google-style docstrings) --------------------------------------
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
+
+
+def _skip_workchains(app, what, name, obj, skip, options):
+    """Hide WorkChain classes from autoapi.
+
+    Their runtime-defined input/output spec is invisible to static analysis, so
+    autoapi would only show the outline-step methods (an implementation detail).
+    They are documented instead by the ``aiida-workchain`` directive (see
+    ``workflows.rst``), which renders the actual inputs/outputs.
+    """
+    if what == "class" and name.endswith("WorkChain"):
+        return True
+    return skip
+
+
+def setup(app):
+    """Connect the autoapi skip handler."""
+    app.connect("autoapi-skip-member", _skip_workchains)
