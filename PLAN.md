@@ -153,8 +153,9 @@ defines it directly since it *is* the crystal.
 > let thin wrapper `calcfunction`s convert to/from our Data types. Decide during
 > implementation; prefer the simplest approach that keeps provenance.
 
-### 3.2 Atomic operations (`aiida_pythonjob_ins.calculations`)
-Plain Python functions wrapped for execution with `aiida-pythonjob`:
+### 3.2 Atomic operations (`aiida_pythonjob_ins.operations` + `.pythonjobs`)
+Pure Python functions live in `operations.py` (AiiDA-free import chain); the
+`aiida-pythonjob` input builders (`prepare_*_inputs`) live in `pythonjobs.py`:
 
 1. `read_force_constants(...)` → `ForceConstantsData`
    - Read a `.castep_bin` / `phonopy.yaml` into a Euphonic `ForceConstants`.
@@ -199,9 +200,11 @@ source: `calculations/pythonjob.py`, `calculations/utils.py`, `utils.py`):
   - Always: `cloudpickle` + whatever the function imports (`numpy`, `seekpath`,
     `euphonic`). (`node_graph` only if you pass an inputs/outputs spec; we don't.)
   - **By reference (our default)**: also the defining module must be importable.
-    Because our ops live under `calculations/`, whose `__init__` imports
-    aiida-pythonjob, importing the ops by reference currently also pulls in
-    aiida-core -> the remote ends up ~equivalent to a full plugin install.
+    The ops live in `operations.py`, whose import chain is AiiDA-free (the package
+    `__init__` is empty), so unpickling the function on the remote imports only
+    euphonic/seekpath/numpy and does *not* initialise aiida (no profile/config
+    needed there). The package is still *installed* on the remote (pulling
+    aiida-core as a dependency); a fully aiida-free remote requires by-value.
   - **By value** (`register_pickle_by_value=True`): the plugin need not be
     installed remotely; only `cloudpickle` + `numpy` + `seekpath` + `euphonic`.
     Note the env saving is just "skip aiida + the plugin" -- euphonic (the heavy
@@ -294,7 +297,7 @@ Convenience AiiDA -> AiiDA views (on `QpointPhononModesData`):
   path if given, else Euphonic's automatic ticks; the path is validated against
   the modes' q-points/cell)
 
-Non-AiiDA -> non-AiiDA transforms (pure `euphonic_ops` / Euphonic API):
+Non-AiiDA -> non-AiiDA transforms (pure `operations` / Euphonic API):
 - `.castep_bin` -> `euphonic.ForceConstants` : **`euphonic.ForceConstants.from_castep`** (the actual reader). `read_force_constants_from_castep` is a thin module-level wrapper used as the PythonJob `function` -- a bound classmethod is a `method`, not a `FunctionType`, so aiida-pythonjob's `build_function_data` rejects it -- and to attach logging.
 - spglib cell tuple `(lattice, positions, numbers)` -> `QpointPath` NamedTuple (q-points, labels, cell) : `band_path_qpoints` (seekpath; needs only structure, not force constants)
 - `euphonic.ForceConstants` + `ndarray` q-points -> `euphonic.QpointPhononModes` : `interpolate_phonon_modes`
@@ -327,17 +330,18 @@ aiida_pythonjob_ins/
 │       │   ├── crystal.py            # EuphonicCrystalData (Crystal <-> StructureData)
 │       │   ├── force_constants.py
 │       │   └── qpoint_phonon_modes.py
-│       ├── calculations/
-│       │   ├── __init__.py
-│       │   └── euphonic_ops.py     # read_force_constants, calculate_dispersion
+│       ├── operations.py         # pure Euphonic ops (AiiDA-free import chain)
+│       │                         #   read_force_constants, band_path_qpoints,
+│       │                         #   interpolate_phonon_modes, calculate_dispersion
+│       ├── pythonjobs.py         # prepare_*_inputs (aiida-pythonjob wrappers)
 │       └── workflows/
 │           ├── __init__.py
-│           └── dispersion.py       # WorkChain / WorkGraph composition
+│           └── dispersion.py       # WorkChain (calcfunctions + PythonJobs)
 └── tests/
     ├── conftest.py                 # enable aiida pytest fixtures
     ├── data/                       # reference inputs (from Euphonic /inspect)
     ├── test_data_types.py
-    ├── test_calculations.py
+    ├── test_operations.py
     └── test_workflows.py
 ```
 
@@ -397,7 +401,7 @@ euphonic = [
 - **Test tiers**:
   1. `test_data_types.py` — round-trip `ForceConstantsData` /
      `QpointPhononModesData` (store → reload → compare against Euphonic objects).
-  2. `test_calculations.py` — run each PythonJob op on `aiida_localhost`; check
+  2. `test_operations.py` — run each PythonJob op on `aiida_localhost`; check
      frequencies against known-good values (regression/allclose).
   3. `test_workflows.py` — run the composed WorkChain end-to-end; assert
      provenance links and final band structure.
@@ -424,7 +428,7 @@ euphonic = [
 3. [x] **Atomic ops**: `read_force_constants_from_castep`, `band_path_qpoints`
    (seekpath) and `interpolate_phonon_modes` (public API only); the compute-heavy
    read/interpolate ops run via `aiida-pythonjob`, tested on localhost
-   (`tests/test_calculations.py`).
+   (`tests/test_operations.py`).
 4. [x] **Native types + workflow**: KpointsData q-point spec (built by the
    `generate_band_path` calcfunction), BandsData output (`conversions.py`), and
    `DispersionWorkChain` composing two PythonJobs + three calcfunctions;
@@ -464,7 +468,7 @@ euphonic = [
 - **procps in the image**: added `procps` to the repo `Containerfile` so fresh
   dev containers have `ps` for AiiDA's DirectScheduler (was a manual install).
 - **Logging (not print)**: the atomic ops use a module `logging` logger
-  (`euphonic_ops.LOGGER`) with lazy `%`-style messages; the `T20` ruff rule bans
+  (`operations.LOGGER`) with lazy `%`-style messages; the `T20` ruff rule bans
   stray `print`. Library code only *emits* logs (never configures handlers/levels),
   so INFO messages surface only when the host/AiiDA enables them; inside a
   PythonJob they are not shown at INFO by default (Python's default surfaces only

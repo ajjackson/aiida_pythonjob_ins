@@ -9,14 +9,14 @@ from aiida.engine import run_get_node
 from aiida_pythonjob import PythonJob
 from euphonic import ForceConstants
 
-from aiida_pythonjob_ins.calculations import (
+from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
+from aiida_pythonjob_ins.operations import (
     calculate_dispersion,
-    prepare_dispersion_inputs,
     read_force_constants_from_castep,
 )
-from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
+from aiida_pythonjob_ins.pythonjobs import prepare_dispersion_inputs
 
-OPS_LOGGER = "aiida_pythonjob_ins.calculations.euphonic_ops"
+OPS_LOGGER = "aiida_pythonjob_ins.operations"
 
 
 def test_operations_emit_logs(quartz_castep_bin, caplog):

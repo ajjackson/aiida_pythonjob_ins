@@ -32,17 +32,17 @@ from aiida.orm import (
 )
 from aiida_pythonjob import PythonJob
 
-from aiida_pythonjob_ins.calculations import (
-    band_path_qpoints,
-    prepare_interpolation_inputs,
-    prepare_read_force_constants_inputs,
-)
 from aiida_pythonjob_ins.conversions import (
     qpoints_to_kpoints_data,
     structure_to_spglib_cell,
 )
 from aiida_pythonjob_ins.data import QpointPhononModesData
 from aiida_pythonjob_ins.data.mixins import SupportsToStructure
+from aiida_pythonjob_ins.operations import band_path_qpoints
+from aiida_pythonjob_ins.pythonjobs import (
+    prepare_interpolation_inputs,
+    prepare_read_force_constants_inputs,
+)
 
 
 @calcfunction

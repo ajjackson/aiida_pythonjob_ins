@@ -10,13 +10,13 @@ from aiida.orm import BandsData, Float, KpointsData, StructureData
 from aiida_pythonjob import PythonJob
 from euphonic import ForceConstants
 
-from aiida_pythonjob_ins.calculations import (
-    calculate_dispersion,
-    interpolate_phonon_modes,
-    prepare_interpolation_inputs,
-)
 from aiida_pythonjob_ins.conversions import qpoints_to_kpoints_data
 from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
+from aiida_pythonjob_ins.operations import (
+    calculate_dispersion,
+    interpolate_phonon_modes,
+)
+from aiida_pythonjob_ins.pythonjobs import prepare_interpolation_inputs
 from aiida_pythonjob_ins.workflows.dispersion import (
     extract_structure,
     generate_band_path,

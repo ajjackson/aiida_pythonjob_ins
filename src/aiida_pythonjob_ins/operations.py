@@ -1,8 +1,11 @@
 """Atomic Euphonic operations, written as plain Python functions.
 
 These functions use only the **public** Euphonic API and know nothing about
-AiiDA, so they can be unit-tested directly and reused elsewhere. They are turned
-into AiiDA processes by the helpers in :mod:`aiida_pythonjob_ins.calculations`.
+AiiDA, so they can be unit-tested directly and reused elsewhere. Crucially, this
+module's import chain is AiiDA-free (the package ``__init__`` is empty), so
+by-reference cloudpickling can target a lean remote environment (euphonic +
+seekpath + numpy, no aiida). They are turned into AiiDA ``PythonJob``s by the
+helpers in :mod:`aiida_pythonjob_ins.pythonjobs`.
 
 The dispersion workflow is built from composable pieces, mirroring
 ``euphonic.cli.dispersion`` (https://euphonic.readthedocs.io/en/stable/cli.html)
@@ -66,7 +69,7 @@ def read_force_constants_from_castep(filename: str) -> ForceConstants:
 
     ``filename`` is resolved relative to the working directory. When run as a
     PythonJob the CASTEP file is staged there via ``upload_files`` (see
-    :func:`aiida_pythonjob_ins.calculations.prepare_read_force_constants_inputs`).
+    :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_force_constants_inputs`).
     """
     LOGGER.info("Reading force constants from CASTEP file: %s", filename)
     return ForceConstants.from_castep(filename)
