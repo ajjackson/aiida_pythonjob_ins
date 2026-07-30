@@ -362,7 +362,9 @@ aiida_pythonjob_ins/
         └── tutorials/              # runnable gallery examples (plot_*.py)
             ├── GALLERY_HEADER.rst
             ├── _aiida_setup.py     # shared: temp profile, code, provenance render
-            └── plot_dispersion.py
+            ├── plot_dispersion.py             # quartz CASTEP -> band structure
+            ├── plot_dos.py                    # quartz CASTEP -> phonon DOS
+            └── plot_phonopy_bands_and_dos.py  # NaCl Phonopy -> bands + DOS
 ```
 
 ---
@@ -479,9 +481,16 @@ modelled on abinslib: furo theme, `sphinx-autoapi`, `sphinx-gallery`, myst).
    provenance rendering). Includes the first tutorial (`plot_dispersion.py`);
    builds warning-free. `graphviz` + `procps` added to the repo `Containerfile`
    and the docs CI.
-4. [ ] **More gallery tutorials**: add `plot_*.py` for phonon DOS and for the
-   Phonopy workflow (NaCl bands + DOS), each rendering result plots *and* AiiDA
-   provenance graphs. (Dispersion example already shipped in step 3.)
+4. [x] **More gallery tutorials**: `plot_dos.py` (quartz DOS) and
+   `plot_phonopy_bands_and_dos.py` (NaCl bands + DOS from Phonopy input), each
+   rendering result plots *and* AiiDA provenance graphs. Gallery now runs three
+   examples; docs build warning-free.
+
+### Possible next steps
+
+- Wire up the main `ci.yml` to also run `ruff` (currently pytest-only).
+- `abinslib` / `resins` wrappers as new op/data modules (INS intensities).
+- Optionally publish docs to GitHub Pages (workflow already present).
 
 ### Implementation notes / decisions made
 
