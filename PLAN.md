@@ -167,6 +167,58 @@ Plain Python functions wrapped for execution with `aiida-pythonjob`:
   calculation/workflow accept a `code`/`computer` in the standard AiiDA way so the
   same code can target a remote scheduler unchanged.
 
+### 3.5 PythonJob execution model & the Code environment
+How a `PythonJob` step actually runs (verified against aiida-pythonjob 0.5.2
+source: `calculations/pythonjob.py`, `calculations/utils.py`, `utils.py`):
+
+- **Parent (AiiDA) side, per step**: input nodes are converted to raw Python via
+  our deserializers (e.g. `ForceConstantsData -> euphonic.ForceConstants`,
+  `KpointsData -> ndarray`); the function and inputs are cloudpickled
+  (`function.pkl`, `inputs.pickle`); `script.py` and any `upload_files` are staged.
+  After the run, `results.pickle` is loaded and outputs are serialized back to
+  nodes via our serializers.
+- **Remote (Code) side**: `python script.py` imports `cloudpickle`, loads the two
+  pickles, calls `function(**inputs)`, writes `results.pickle`. It never imports
+  aiida.
+- **Function pickling** (`build_function_data` / `inspect_function`):
+  - a *module-level* function in an installed package (our case) -> pickled **by
+    reference** (module + name); the remote must import the defining module.
+  - a function in `__main__` or a *nested* callable -> pickled **by value**
+    (source/bytecode shipped); the remote does *not* need the package. (This is
+    why the aiida-pythonjob docs' auto-created conda env installs only science
+    libs and no plugin: their example functions are defined inline in `__main__`.)
+  - `register_pickle_by_value=True` forces by-value even for an installed module.
+
+- **What the remote (Code) environment must contain**:
+  - Always: `cloudpickle` + whatever the function imports (`numpy`, `seekpath`,
+    `euphonic`). (`node_graph` only if you pass an inputs/outputs spec; we don't.)
+  - **By reference (our default)**: also the defining module must be importable.
+    Because our ops live under `calculations/`, whose `__init__` imports
+    aiida-pythonjob, importing the ops by reference currently also pulls in
+    aiida-core -> the remote ends up ~equivalent to a full plugin install.
+  - **By value** (`register_pickle_by_value=True`): the plugin need not be
+    installed remotely; only `cloudpickle` + `numpy` + `seekpath` + `euphonic`.
+    Note the env saving is just "skip aiida + the plugin" -- euphonic (the heavy
+    dep) is still required. (Restructuring the pure ops into an aiida-free module
+    would give the same env saving while keeping by-reference.)
+- **euphonic in the *parent*** is required by our current design (Data classes
+  import euphonic at load; parent-side (de)serialization builds/unpickles euphonic
+  objects). It is avoidable only by keeping euphonic imports lazy and exchanging
+  plain data (JSON/arrays) across the PythonJob boundary rather than euphonic
+  objects.
+- **By-reference vs by-value at scale**: by-reference ships a tiny module+name
+  string per job and stores nothing extra in provenance; by-value re-serializes
+  the function/module code on *every* submission, which aiida-pythonjob stores per
+  calculation node -- so at production scale (many jobs) by-value inflates network
+  transfer, submission time, and the AiiDA repository/DB. **By-reference is the
+  better production default** (and is what we use); reserve by-value for notebooks/
+  experiments or when the package genuinely cannot be installed remotely.
+- **Providing the Code environment**: prefer *deriving* it from the project's
+  pinned deps (e.g. `uv export`) over a hand-maintained requirements file, which
+  drifts. cloudpickle round-trips are sensitive to version skew (cloudpickle
+  version, numpy ABI, euphonic version), so keeping the two environments closely
+  matched is a feature, not overhead.
+
 ---
 
 ## 4. Project layout (src-layout)

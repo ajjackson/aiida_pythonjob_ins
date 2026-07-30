@@ -5,6 +5,17 @@ We use ``aiida-pythonjob`` to run the plain functions in
 processes. ``PythonJob`` runs through a ``Code`` on a ``Computer`` (localhost in
 tests, but any configured machine in production), so the standard AiiDA
 Computer/Code hooks apply. See https://github.com/aiidateam/aiida-pythonjob .
+
+Code-environment note: because these ops are module-level functions in an
+installed package, aiida-pythonjob cloudpickles them *by reference* -- a tiny
+module+name string per job -- so the Code's environment must be able to
+``import aiida_pythonjob_ins`` (which also pulls in aiida-core). This is the
+preferred production default: the code lives once on the remote and provenance
+stays small. Passing ``register_pickle_by_value=True`` (via ``**kwargs`` below)
+ships the function *by value* instead, so the Code needs only cloudpickle + the
+science libs; but it re-sends and re-stores the code on every submission, so it is
+best reserved for experiments/notebooks rather than production scale. See PLAN.md
+§3.5 for the full execution model and environment requirements.
 """
 
 from __future__ import annotations
