@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from aiida.engine import run_get_node
-from aiida.orm import BandsData, CalcJobNode, Float, KpointsData, SinglefileData
+from aiida.orm import (
+    BandsData,
+    CalcJobNode,
+    Float,
+    KpointsData,
+    SinglefileData,
+    StructureData,
+)
 
 from aiida_pythonjob_ins.data import QpointPhononModesData
 from aiida_pythonjob_ins.workflows import DispersionWorkChain
@@ -27,9 +34,11 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
     assert node.is_finished_ok, node.exit_status
 
     modes_node = results["phonon_modes"]
+    structure = results["structure"]
     band_path = results["band_path"]
     band_structure = results["band_structure"]
     assert isinstance(modes_node, QpointPhononModesData)
+    assert isinstance(structure, StructureData)
     assert isinstance(band_path, KpointsData)
     assert isinstance(band_structure, BandsData)
 

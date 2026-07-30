@@ -17,9 +17,21 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any, ClassVar, Self
+from typing import Any, ClassVar, Protocol, Self, runtime_checkable
 
-from aiida.orm import Data
+import numpy as np
+from aiida.orm import Data, StructureData
+
+
+@runtime_checkable
+class SupportsToStructure(Protocol):
+    """An AiiDA node that can yield its crystal as a ``StructureData``.
+
+    Used to type the generic ``extract_structure`` calcfunction; both
+    ``ForceConstantsData`` and ``QpointPhononModesData`` satisfy it.
+    """
+
+    def to_structure(self) -> StructureData: ...
 
 
 class EuphonicJSONData(Data):
@@ -74,3 +86,20 @@ class EuphonicJSONData(Data):
         node = cls()
         node.base.repository.put_object_from_file(str(filepath), cls._filename)
         return node
+
+    def to_structure(self) -> StructureData:
+        """Extract the wrapped object's crystal as a native ``StructureData``.
+
+        Works for any wrapped Euphonic object exposing ``.crystal`` (e.g.
+        ``ForceConstants``, ``QpointPhononModes``). Built with AiiDA's native API
+        only -- no ASE dependency -- from cell + element symbols + positions
+        (euphonic stores fractional positions; ``StructureData`` wants Cartesian).
+        """
+        crystal = self.get_object().crystal
+        cell = crystal.cell_vectors.to("angstrom").magnitude
+        cartesian = np.asarray(crystal.atom_r) @ cell
+
+        structure = StructureData(cell=cell.tolist())
+        for symbol, position in zip(crystal.atom_type, cartesian, strict=True):
+            structure.append_atom(position=position.tolist(), symbols=str(symbol))
+        return structure

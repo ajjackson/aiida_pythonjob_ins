@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import matplotlib as mpl
 import numpy as np
+import pytest
 from aiida.engine import run_get_node
-from aiida.orm import BandsData, Float, KpointsData
+from aiida.orm import BandsData, Float, KpointsData, StructureData
 from aiida_pythonjob import PythonJob
 from euphonic import ForceConstants
 
@@ -19,7 +20,10 @@ from aiida_pythonjob_ins.conversions import (
     qpoints_to_kpoints_data,
 )
 from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
-from aiida_pythonjob_ins.workflows.dispersion import generate_band_path
+from aiida_pythonjob_ins.workflows.dispersion import (
+    extract_structure,
+    generate_band_path,
+)
 
 
 def test_kpoints_roundtrip(aiida_profile):
@@ -40,14 +44,60 @@ def test_modes_data_to_native_types(aiida_profile, quartz_castep_bin):
     modes = force_constants.calculate_qpoint_phonon_modes(qpts)
     node = QpointPhononModesData(modes)
 
-    kpoints = node.get_kpoints()
+    kpoints = node.to_kpoints()
     assert isinstance(kpoints, KpointsData)
     np.testing.assert_allclose(kpoints.get_kpoints(), qpts)
 
-    bands = node.get_bands()
+    bands = node.to_bands()
     assert isinstance(bands, BandsData)
     n_branches = force_constants.crystal.n_atoms * 3
     assert bands.get_bands().shape == (len(qpts), n_branches)
+
+
+def test_to_structure(aiida_profile, quartz_castep_bin):
+    """ForceConstantsData exposes its crystal as a native StructureData."""
+    node = ForceConstantsData.from_castep(quartz_castep_bin)
+    structure = node.to_structure()
+    assert isinstance(structure, StructureData)
+    # quartz: 3 Si + 6 O
+    assert len(structure.sites) == 9
+    assert {kind.symbol for kind in structure.kinds} == {"Si", "O"}
+
+
+def test_extract_structure_is_generic(aiida_profile, quartz_castep_bin):
+    """extract_structure works on any node with to_structure() (here: modes)."""
+    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    modes = force_constants.calculate_qpoint_phonon_modes(np.array([[0.0, 0.0, 0.0]]))
+    modes_node = QpointPhononModesData(modes).store()
+
+    structure = extract_structure(modes_node)  # inherited to_structure()
+    assert isinstance(structure, StructureData)
+    assert len(structure.sites) == force_constants.crystal.n_atoms
+
+
+def test_modes_to_bands_without_kpoints_uses_euphonic_labels(
+    aiida_profile, quartz_castep_bin
+):
+    """Without a KpointsData, labels fall back to Euphonic's automatic ticks."""
+    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    modes = calculate_dispersion(force_constants, q_spacing=0.3)
+    bands = QpointPhononModesData(modes).to_bands()  # no kpoints
+    assert bands.labels  # euphonic derived at least Gamma
+
+
+def test_modes_to_bands_validates_mismatched_kpoints(aiida_profile, quartz_castep_bin):
+    """A KpointsData whose q-points disagree with the modes is rejected."""
+    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    modes = force_constants.calculate_qpoint_phonon_modes(
+        np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]])
+    )
+    node = QpointPhononModesData(modes)
+    wrong = qpoints_to_kpoints_data(
+        np.array([[0.1, 0.1, 0.1], [0.2, 0.2, 0.2]]),
+        force_constants.crystal.cell_vectors.to("angstrom").magnitude,
+    )
+    with pytest.raises(ValueError, match="do not match"):
+        node.to_bands(wrong)
 
 
 def test_bandsdata_matplotlib_export(aiida_profile, quartz_castep_bin, tmp_path):
@@ -56,7 +106,7 @@ def test_bandsdata_matplotlib_export(aiida_profile, quartz_castep_bin, tmp_path)
 
     force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
     modes = calculate_dispersion(force_constants, q_spacing=0.3)
-    bands = QpointPhononModesData(modes).get_bands()
+    bands = QpointPhononModesData(modes).to_bands()
     bands.store()
 
     out = tmp_path / "bands.png"
@@ -74,8 +124,10 @@ def test_interpolation_from_kpoints_matches_direct(python_code, quartz_castep_bi
     force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
     fc_node = ForceConstantsData(force_constants).store()
 
-    # Build the path as a KpointsData via the parent-side calcfunction.
-    kpoints = generate_band_path(fc_node, Float(0.2))
+    # Build the path as a KpointsData via the parent-side calcfunctions
+    # (force constants -> structure -> seekpath path).
+    structure = extract_structure(fc_node)
+    kpoints = generate_band_path(structure, Float(0.2))
     assert isinstance(kpoints, KpointsData)
 
     expected = interpolate_phonon_modes(force_constants, kpoints.get_kpoints())

@@ -21,7 +21,26 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from aiida.orm import BandsData, KpointsData
+from aiida.orm import BandsData, KpointsData, StructureData
+
+
+def structure_to_spglib_cell(
+    structure: StructureData,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Convert a ``StructureData`` to a spglib/seekpath ``(lattice, positions,
+    numbers)`` tuple, using only AiiDA's native API (no ASE).
+
+    ``numbers`` are per-kind integer labels (distinct species markers) -- all
+    seekpath needs to detect symmetry; they need not be atomic numbers.
+    """
+    cell = np.array(structure.cell)
+    inverse_cell = np.linalg.inv(cell)
+    kind_number = {kind.name: index + 1 for index, kind in enumerate(structure.kinds)}
+    positions = np.array(
+        [np.array(site.position) @ inverse_cell for site in structure.sites]
+    )
+    numbers = np.array([kind_number[site.kind_name] for site in structure.sites])
+    return cell, positions, numbers
 
 
 def qpoints_to_kpoints_data(
@@ -47,26 +66,55 @@ def modes_to_bands_data(
 ) -> BandsData:
     """Compose a ``BandsData`` from Euphonic ``QpointPhononModes``.
 
+    ``BandsData`` is a *join*: q-points + cell + high-symmetry labels (from the
+    path) plus frequencies (from ``modes``); neither Euphonic class holds all of
+    it (``QpointPhononModes`` has no labels; ``Spectrum1DCollection`` has no
+    3-D q-points/eigenvectors).
+
     Parameters
     ----------
     modes
-        A Euphonic ``QpointPhononModes`` object.
+        A Euphonic ``QpointPhononModes`` object (supplies q-points + frequencies).
     kpoints
         Optional ``KpointsData`` providing the exact q-point positions *and*
         high-symmetry labels (e.g. the path used to compute ``modes``). If given,
-        its labels are carried onto the ``BandsData`` for nicely-ticked plots. If
-        omitted, positions are taken from ``modes`` and no labels are set.
+        its q-points and cell are **validated** against ``modes`` (a mismatch
+        means path and modes are inconsistent). If omitted, positions come from
+        ``modes`` and labels fall back to Euphonic's automatic tick labels
+        (``QpointPhononModes.get_dispersion().x_tick_labels``).
     """
-    bands = BandsData()
     cell = modes.crystal.cell_vectors.to("angstrom").magnitude
-    bands.set_cell(cell)
 
     if kpoints is not None:
-        bands.set_kpoints(kpoints.get_kpoints(), cartesian=False, labels=kpoints.labels)
+        _validate_kpoints_match_modes(kpoints, modes, cell)
+        positions = kpoints.get_kpoints()
+        labels = kpoints.labels
     else:
-        bands.set_kpoints(modes.qpts, cartesian=False)
+        positions = modes.qpts
+        # Euphonic derives tick labels heuristically from the q-point coordinates.
+        labels = modes.get_dispersion().x_tick_labels
 
+    bands = BandsData()
+    bands.set_cell(cell)
+    bands.set_kpoints(positions, cartesian=False, labels=labels)
     # Phonon frequencies play the role of "band energies"; keep them in meV.
-    frequencies = modes.frequencies.to("meV").magnitude
-    bands.set_bands(frequencies, units="meV")
+    bands.set_bands(modes.frequencies.to("meV").magnitude, units="meV")
     return bands
+
+
+def _validate_kpoints_match_modes(
+    kpoints: KpointsData, modes: Any, cell: np.ndarray
+) -> None:
+    """Raise if a ``KpointsData`` path is inconsistent with the phonon modes."""
+    if not np.allclose(kpoints.get_kpoints(), modes.qpts):
+        msg = (
+            "KpointsData q-points do not match the phonon modes' q-points; "
+            "the band path and the computed modes are inconsistent."
+        )
+        raise ValueError(msg)
+    if not np.allclose(np.asarray(kpoints.cell), cell):
+        msg = (
+            "KpointsData cell does not match the phonon modes' crystal cell; "
+            "q-point fractional coordinates would refer to a different lattice."
+        )
+        raise ValueError(msg)

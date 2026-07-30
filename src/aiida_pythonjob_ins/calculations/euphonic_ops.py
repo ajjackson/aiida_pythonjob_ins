@@ -20,6 +20,7 @@ functions stay AiiDA-free and unit-testable.
 from __future__ import annotations
 
 import logging
+from typing import NamedTuple
 
 import numpy as np
 import seekpath
@@ -35,8 +36,33 @@ from euphonic import ForceConstants, QpointPhononModes
 LOGGER = logging.getLogger(__name__)
 
 
+class QpointPath(NamedTuple):
+    """A high-symmetry q-point path: positions + labels + cell (no energies).
+
+    A well-defined return type for :func:`band_path_qpoints`. It is a plain
+    ``NamedTuple`` used purely on the Python side; the parent-side
+    ``generate_band_path`` calcfunction turns it into a native ``KpointsData``.
+
+    (Note: aiida-pythonjob would treat a ``NamedTuple`` *return annotation* as a
+    structured multi-output spec, splitting it into one output port per field. That
+    does not apply here because ``band_path_qpoints`` is not used as a PythonJob
+    ``function`` -- if it were, the split into qpoints/labels/cell could even be
+    desirable.)
+    """
+
+    qpoints: np.ndarray
+    labels: list[tuple[int, str]]
+    cell: np.ndarray
+
+
 def read_force_constants_from_castep(filename: str) -> ForceConstants:
     """Read a CASTEP ``.castep_bin``/``.check`` file into ``ForceConstants``.
+
+    A thin wrapper over ``ForceConstants.from_castep``. It exists because a
+    PythonJob's ``function`` must be a plain module-level function: a bound
+    classmethod (``ForceConstants.from_castep``) is a ``method``, not a
+    ``FunctionType``, so aiida-pythonjob's ``build_function_data`` rejects it. The
+    wrapper is also where we attach logging.
 
     ``filename`` is resolved relative to the working directory. When run as a
     PythonJob the CASTEP file is staged there via ``upload_files`` (see
@@ -47,21 +73,22 @@ def read_force_constants_from_castep(filename: str) -> ForceConstants:
 
 
 def band_path_qpoints(
-    force_constants: ForceConstants,
+    cell: tuple[np.ndarray, np.ndarray, np.ndarray],
     q_spacing: float = 0.025,
     *,
     insert_gamma: bool = True,
-) -> tuple[np.ndarray, list[tuple[int, str]]]:
-    """Return explicit q-points and ``(index, label)`` pairs for a band path.
+) -> QpointPath:
+    """Return a :class:`QpointPath` (q-points + labels + cell) for a band path.
 
-    Pure/AiiDA-free: the parent-side ``generate_band_path`` calcfunction wraps this
-    and packages the result (plus the cell) into a native ``KpointsData``.
+    ``cell`` is a spglib-style ``(lattice, scaled_positions, numbers)`` tuple --
+    e.g. from ``euphonic.Crystal.to_spglib_cell()`` or an ASE ``Atoms``. Only the
+    structure is needed; force constants are not. Pure/AiiDA-free: the parent-side
+    ``generate_band_path`` calcfunction wraps this into a native ``KpointsData``.
     """
-    # ``to_spglib_cell`` is public; seekpath works in the *original* cell so the
-    # returned q-points are valid inputs to ``calculate_qpoint_phonon_modes``.
-    structure = force_constants.crystal.to_spglib_cell()
+    # Work in the *original* cell so the returned q-points are valid inputs to
+    # ``calculate_qpoint_phonon_modes`` (which uses the same cell's reciprocal basis).
     bandpath = seekpath.get_explicit_k_path_orig_cell(
-        structure, reference_distance=q_spacing
+        cell, reference_distance=q_spacing
     )
 
     labels = list(bandpath["explicit_kpoints_labels"])
@@ -86,7 +113,8 @@ def band_path_qpoints(
         len(qpts),
         len(tick_labels),
     )
-    return qpts, tick_labels
+    lattice = np.asarray(cell[0])  # real-space cell (Angstrom) for KpointsData
+    return QpointPath(qpoints=qpts, labels=tick_labels, cell=lattice)
 
 
 def interpolate_phonon_modes(
@@ -121,5 +149,7 @@ def calculate_dispersion(
     asr: str | None = "reciprocal",
 ) -> QpointPhononModes:
     """Convenience: build a band path and interpolate modes along it."""
-    qpts, _ = band_path_qpoints(force_constants, q_spacing, insert_gamma=insert_gamma)
-    return interpolate_phonon_modes(force_constants, qpts, asr=asr)
+    path = band_path_qpoints(
+        force_constants.crystal.to_spglib_cell(), q_spacing, insert_gamma=insert_gamma
+    )
+    return interpolate_phonon_modes(force_constants, path.qpoints, asr=asr)

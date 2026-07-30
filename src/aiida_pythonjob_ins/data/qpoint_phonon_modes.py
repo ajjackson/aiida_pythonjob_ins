@@ -30,8 +30,8 @@ class QpointPhononModesData(EuphonicJSONData):
         """Return the wrapped :class:`euphonic.QpointPhononModes`."""
         return self.get_object()
 
-    def get_kpoints(self) -> KpointsData:
-        """Map the q-point positions to a native ``KpointsData``.
+    def to_kpoints(self) -> KpointsData:
+        """Convert the q-point positions to a native ``KpointsData``.
 
         Note: Euphonic modes carry no high-symmetry labels, so the returned
         ``KpointsData`` has positions only. Labels come from the ``KpointsData``
@@ -41,10 +41,11 @@ class QpointPhononModesData(EuphonicJSONData):
         cell = modes.crystal.cell_vectors.to("angstrom").magnitude
         return qpoints_to_kpoints_data(modes.qpts, cell)
 
-    def get_bands(self, kpoints: KpointsData | None = None) -> BandsData:
-        """Compose a native ``BandsData`` (frequencies as bands) for plotting.
+    def to_bands(self, kpoints: KpointsData | None = None) -> BandsData:
+        """Convert to a native ``BandsData`` (frequencies as bands) for plotting.
 
-        Pass the path ``KpointsData`` to carry high-symmetry labels onto the
+        Euphonic modes don't carry high-symmetry labels, so pass the path
+        ``KpointsData`` to carry its labels (and exact positions) onto the
         ``BandsData``; then ``BandsData.show_mpl()`` yields a labelled plot.
         """
         return modes_to_bands_data(self.get_modes(), kpoints=kpoints)

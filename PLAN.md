@@ -118,7 +118,7 @@ We integrate AiiDA's built-in reciprocal-space types
 - **`BandsData`** (a `KpointsData` subclass) represents the output band
   structure. A Euphonic `QpointPhononModes` is essentially `BandsData`
   (frequencies) + eigenvectors, so we build `BandsData` by *composition*
-  (`conversions.modes_to_bands_data`) and keep the eigenvectors in
+  (`QpointPhononModesData.to_bands`, via `conversions.modes_to_bands_data`) and keep the eigenvectors in
   `QpointPhononModesData`. `BandsData.show_mpl()` / `export(..., 'mpl_png')`
   plots the dispersion with no AiiDALab dependency.
 
@@ -266,20 +266,31 @@ AiiDA `Data` nodes <-> non-AiiDA objects (the boundary the bridge handles):
 |---|---|---|
 | `ForceConstantsData` (custom) | `ForceConstantsData(fc)` / `.get_force_constants()`; serializer/deserializer; `.from_castep(path)` | `euphonic.ForceConstants` (or a `.castep_bin` file) |
 | `QpointPhononModesData` (custom) | `QpointPhononModesData(modes)` / `.get_modes()`; serializer/deserializer | `euphonic.QpointPhononModes` |
-| `KpointsData` (built-in) | `qpoints_to_kpoints_data(qpts, cell, labels)` / `kpoints_data_to_qpoints()` (= `.get_kpoints()`) | `ndarray` of fractional q-points (+ labels, cell) |
-| `BandsData` (built-in) | `modes_to_bands_data(modes, kpoints)` (compose, one-way) | `euphonic.QpointPhononModes` (+ `KpointsData` for labels) |
+| `StructureData` (built-in) | `EuphonicJSONData.to_structure()` (on the base -> any wrapping node; native, no ASE); `structure_to_spglib_cell()` | `euphonic.Crystal` (cell + symbols + positions); spglib cell tuple |
+| `KpointsData` (built-in) | `qpoints_to_kpoints_data(qpts, cell, labels)` / `kpoints_data_to_qpoints()` (= `.get_kpoints()`) | `ndarray` q-points (+ labels, cell); `band_path_qpoints` returns these as a `QpointPath` NamedTuple |
+| `BandsData` (built-in) | `QpointPhononModesData.to_bands(kpoints=None)` (compose, one-way; via `modes_to_bands_data`; validates the path against the modes) | `euphonic.QpointPhononModes` (+ optional `KpointsData` for labels) |
 | `SinglefileData` (built-in) | `upload_files` staging; read by basename in the job | a `.castep_bin` file on disk |
 | `Float`, `Str` (built-in) | aiida-pythonjob builtin serializers (automatic) | Python `float` (`q_spacing`), `str` (`filename`) |
 
+AiiDA -> AiiDA transforms (parent-side calcfunctions / methods):
+- *any* node with `.to_structure()` -> `StructureData` : `extract_structure`
+  (generic calcfunction, typed by the `SupportsToStructure` protocol) /
+  `.to_structure()` (defined once on `EuphonicJSONData`, so both
+  `ForceConstantsData` and `QpointPhononModesData` have it)
+- `StructureData` (+ `q_spacing`) -> `KpointsData` : `generate_band_path` (calcfunction, seekpath)
+- (`QpointPhononModesData`, `KpointsData`) -> `BandsData` : `assemble_bands` (calcfunction) / `.to_bands()`
+
 Convenience AiiDA -> AiiDA views (on `QpointPhononModesData`):
-- `.get_kpoints()` -> `KpointsData` (positions only; no labels)
-- `.get_bands(kpoints=...)` -> `BandsData` (frequencies as bands; labels from the path)
+- `.to_kpoints()` -> `KpointsData` (positions only; no labels)
+- `.to_bands(kpoints=None)` -> `BandsData` (frequencies as bands; labels from the
+  path if given, else Euphonic's automatic ticks; the path is validated against
+  the modes' q-points/cell)
 
 Non-AiiDA -> non-AiiDA transforms (pure `euphonic_ops` / Euphonic API):
-- `.castep_bin` -> `euphonic.ForceConstants` : `read_force_constants_from_castep` (`ForceConstants.from_castep`)
-- `euphonic.ForceConstants` -> (`ndarray` q-points, labels) : `band_path_qpoints` (seekpath)
+- `.castep_bin` -> `euphonic.ForceConstants` : **`euphonic.ForceConstants.from_castep`** (the actual reader). `read_force_constants_from_castep` is a thin module-level wrapper used as the PythonJob `function` -- a bound classmethod is a `method`, not a `FunctionType`, so aiida-pythonjob's `build_function_data` rejects it -- and to attach logging.
+- spglib cell tuple `(lattice, positions, numbers)` -> `QpointPath` NamedTuple (q-points, labels, cell) : `band_path_qpoints` (seekpath; needs only structure, not force constants)
 - `euphonic.ForceConstants` + `ndarray` q-points -> `euphonic.QpointPhononModes` : `interpolate_phonon_modes`
-- `euphonic.QpointPhononModes` -> `euphonic.Spectrum1D` : `.get_dispersion()` (euphonic-native band structure for plotting)
+- `euphonic.QpointPhononModes` -> `euphonic.Spectrum1DCollection` : `.get_dispersion()` (euphonic-native band structure for plotting; carries `x_tick_labels`)
 
 Note: there are currently no ad-hoc `dict` exchange payloads -- typed objects
 (`Data` nodes, Euphonic classes, or `ndarray`) carry all inputs/outputs. Code and
@@ -404,7 +415,7 @@ euphonic = [
    (`tests/test_calculations.py`).
 4. [x] **Native types + workflow**: KpointsData q-point spec (built by the
    `generate_band_path` calcfunction), BandsData output (`conversions.py`), and
-   `DispersionWorkChain` composing two PythonJobs + two calcfunctions;
+   `DispersionWorkChain` composing two PythonJobs + three calcfunctions;
    E2E + conversion tests (`tests/test_workflows.py`, `tests/test_conversions.py`).
 5. [x] **CI**: minimal GitHub Actions workflow (`.github/workflows/ci.yml`),
    x86-64, `uv sync` + `uv run pytest`.
