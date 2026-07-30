@@ -19,6 +19,7 @@ from aiida_pythonjob_ins.operations import (
 from aiida_pythonjob_ins.pythonjobs import (
     prepare_dispersion_inputs,
     prepare_dos_inputs,
+    prepare_read_phonopy_inputs,
 )
 
 OPS_LOGGER = "aiida_pythonjob_ins.operations"
@@ -107,3 +108,19 @@ def test_dos_pythonjob_returns_xydata(python_code, quartz_castep_bin):
     _, energy, _ = dos_node.get_x()
     ((_, dos_values, _),) = dos_node.get_y()
     assert len(energy) == len(dos_values)
+
+
+def test_read_phonopy_pythonjob(python_code, phonopy_files):
+    """Reading Phonopy input via PythonJob yields a ForceConstantsData."""
+    inputs = prepare_read_phonopy_inputs(
+        summary=phonopy_files["summary"],
+        force_constants=phonopy_files["force_constants"],
+        born=phonopy_files["born"],
+        code=python_code,
+    )
+    results, node = run_get_node(PythonJob, **inputs)
+
+    assert node.is_finished_ok, node.exit_status
+    fc_node = results["result"]
+    assert isinstance(fc_node, ForceConstantsData)
+    assert fc_node.get_force_constants().crystal.n_atoms == 8

@@ -63,6 +63,22 @@ def quartz_castep_bin() -> Path:
 
 
 @pytest.fixture
+def phonopy_dir() -> Path:
+    """Directory of the bundled NaCl Phonopy example (from the Euphonic suite)."""
+    return DATA_DIR / "phonopy" / "NaCl_default"
+
+
+@pytest.fixture
+def phonopy_files(phonopy_dir) -> dict[str, str]:
+    """Phonopy summary/force-constants/born file paths (as strings)."""
+    return {
+        "summary": str(phonopy_dir / "phonopy.yaml"),
+        "force_constants": str(phonopy_dir / "FORCE_CONSTANTS"),
+        "born": str(phonopy_dir / "BORN"),
+    }
+
+
+@pytest.fixture
 def python_code(aiida_code_installed):
     """An AiiDA Code for running PythonJobs on localhost.
 

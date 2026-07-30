@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from aiida.engine import run_get_node
 from aiida.orm import (
     BandsData,
@@ -12,8 +13,9 @@ from aiida.orm import (
     StructureData,
     XyData,
 )
+from euphonic import ForceConstants
 
-from aiida_pythonjob_ins.data import QpointPhononModesData
+from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
 from aiida_pythonjob_ins.workflows import DispersionWorkChain, DosWorkChain
 
 
@@ -83,3 +85,54 @@ def test_dos_workchain(python_code, quartz_castep_bin):
     # read + dos, both PythonJobs
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
     assert len(calcjobs) == 2
+
+
+def _force_constants_from_phonopy(phonopy_dir):
+    fc = ForceConstants.from_phonopy(
+        path=str(phonopy_dir),
+        summary_name="phonopy.yaml",
+        fc_name="FORCE_CONSTANTS",
+        born_name="BORN",
+    )
+    return ForceConstantsData(fc)
+
+
+def test_dispersion_from_phonopy(python_code, phonopy_dir):
+    """DispersionWorkChain accepts a ForceConstantsData (here from Phonopy)."""
+    results, node = run_get_node(
+        DispersionWorkChain,
+        force_constants=_force_constants_from_phonopy(phonopy_dir),
+        q_spacing=Float(0.3),
+        code=python_code,
+    )
+    assert node.is_finished_ok, node.exit_status
+    assert isinstance(results["band_structure"], BandsData)
+    # No CASTEP read step, so only the interpolation PythonJob runs.
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert len(calcjobs) == 1
+
+
+def test_dos_from_phonopy(python_code, phonopy_dir):
+    """DosWorkChain accepts a ForceConstantsData (here from Phonopy)."""
+    results, node = run_get_node(
+        DosWorkChain,
+        force_constants=_force_constants_from_phonopy(phonopy_dir),
+        q_spacing=Float(0.5),
+        energy_spacing=Float(2.0),
+        code=python_code,
+    )
+    assert node.is_finished_ok, node.exit_status
+    assert isinstance(results["dos"], XyData)
+
+
+def test_workchain_requires_exactly_one_source(python_code, quartz_castep_bin):
+    """Providing both castep_file and force_constants is rejected."""
+    castep_file = SinglefileData(str(quartz_castep_bin))
+    fc_node = ForceConstantsData(ForceConstants.from_castep(str(quartz_castep_bin)))
+    with pytest.raises(ValueError, match="exactly one"):
+        run_get_node(
+            DispersionWorkChain,
+            castep_file=castep_file,
+            force_constants=fc_node,
+            code=python_code,
+        )

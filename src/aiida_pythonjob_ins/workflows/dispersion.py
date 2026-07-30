@@ -1,16 +1,16 @@
 """A WorkChain composing Euphonic steps into a dispersion workflow.
 
-Steps:
+Steps (after force constants are resolved by :class:`ForceConstantsWorkChain` --
+read from a CASTEP file via a PythonJob, or taken from a supplied node):
 
-1. read force constants from a CASTEP file  -> ForceConstantsData  (PythonJob)
-2. extract the crystal structure            -> StructureData       (calcfunction)
-3. generate a seekpath q-point path          -> KpointsData         (calcfunction)
-4. interpolate phonon modes on that path    -> QpointPhononModesData (PythonJob)
-5. compose a band structure                 -> BandsData           (calcfunction)
+1. extract the crystal structure            -> StructureData       (calcfunction)
+2. generate a seekpath q-point path          -> KpointsData         (calcfunction)
+3. interpolate phonon modes on that path    -> QpointPhononModesData (PythonJob)
+4. compose a band structure                 -> BandsData           (calcfunction)
 
-The two ``calcfunction`` steps run in-process (they need a loaded AiiDA profile to
-build nodes and are cheap), while the compute-heavy read/interpolate steps run as
-``PythonJob``s that could target a remote machine. Building the band path
+The ``calcfunction`` steps run in-process (they need a loaded AiiDA profile to
+build nodes and are cheap), while the compute-heavy interpolate step runs as a
+``PythonJob`` that could target a remote machine. Building the band path
 parent-side lets it return a native ``KpointsData`` directly -- no custom carrier
 type needed. ``BandsData`` plugs into AiiDA's plotting, e.g.
 ``results['band_structure'].show_mpl()``.
@@ -21,15 +21,8 @@ https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/workflows/writ
 
 from __future__ import annotations
 
-from aiida.engine import ToContext, WorkChain, calcfunction
-from aiida.orm import (
-    AbstractCode,
-    BandsData,
-    Float,
-    KpointsData,
-    SinglefileData,
-    StructureData,
-)
+from aiida.engine import ToContext, calcfunction, if_
+from aiida.orm import BandsData, Float, KpointsData, StructureData
 from aiida_pythonjob import PythonJob
 
 from aiida_pythonjob_ins.conversions import (
@@ -39,10 +32,8 @@ from aiida_pythonjob_ins.conversions import (
 from aiida_pythonjob_ins.data import QpointPhononModesData
 from aiida_pythonjob_ins.data.mixins import SupportsToStructure
 from aiida_pythonjob_ins.operations import band_path_qpoints
-from aiida_pythonjob_ins.pythonjobs import (
-    prepare_interpolation_inputs,
-    prepare_read_force_constants_inputs,
-)
+from aiida_pythonjob_ins.pythonjobs import prepare_interpolation_inputs
+from aiida_pythonjob_ins.workflows.base import ForceConstantsWorkChain
 
 
 @calcfunction
@@ -84,30 +75,21 @@ def assemble_bands(modes: QpointPhononModesData, qpoints: KpointsData) -> BandsD
     return modes.to_bands(qpoints)
 
 
-class DispersionWorkChain(WorkChain):
-    """Read force constants from a CASTEP file, then compute phonon dispersion."""
+class DispersionWorkChain(ForceConstantsWorkChain):
+    """Compute phonon dispersion from a CASTEP file or a ForceConstantsData node."""
 
     @classmethod
     def define(cls, spec) -> None:
-        super().define(spec)
-        spec.input(
-            "castep_file",
-            valid_type=SinglefileData,
-            help="CASTEP .castep_bin/.check file containing force constants.",
-        )
+        super().define(spec)  # castep_file / force_constants / code + validator
         spec.input(
             "q_spacing",
             valid_type=Float,
             default=lambda: Float(0.025),
             help="Target q-point spacing along the band path, in 1/Angstrom.",
         )
-        spec.input(
-            "code",
-            valid_type=AbstractCode,
-            help="Python code used to run the PythonJob steps.",
-        )
         spec.outline(
-            cls.read_force_constants,
+            if_(cls.should_read_castep)(cls.read_force_constants),
+            cls.assign_force_constants,
             cls.generate_path,
             cls.interpolate,
             cls.finalize,
@@ -132,38 +114,23 @@ class DispersionWorkChain(WorkChain):
             valid_type=BandsData,
             help="Phonon band structure (frequencies as bands) for plotting.",
         )
-        spec.exit_code(
-            400,
-            "ERROR_SUB_PROCESS_FAILED",
-            message="A PythonJob step did not finish successfully.",
-        )
-
-    def read_force_constants(self):
-        """Step 1: run the read-force-constants PythonJob."""
-        inputs = prepare_read_force_constants_inputs(
-            self.inputs.castep_file, code=self.inputs.code
-        )
-        return ToContext(read=self.submit(PythonJob, **inputs))
 
     def generate_path(self):
-        """Step 2: extract the structure, then build the q-point path.
+        """Extract the structure, then build the q-point path.
 
         Both are parent-side calcfunctions (cheap, and they build AiiDA nodes).
         seekpath needs only the structure, so we materialize a ``StructureData``
         first -- reusable and idiomatic -- then derive the path from it.
         """
-        if not self.ctx.read.is_finished_ok:
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED
-
         # calcfunctions run synchronously and return their output node directly.
-        self.ctx.structure = extract_structure(self.ctx.read.outputs.result)
+        self.ctx.structure = extract_structure(self.ctx.force_constants)
         self.ctx.path = generate_band_path(self.ctx.structure, self.inputs.q_spacing)
-        return None
+        return
 
     def interpolate(self):
-        """Step 3: interpolate phonon modes on the q-point path."""
+        """Interpolate phonon modes on the q-point path."""
         inputs = prepare_interpolation_inputs(
-            self.ctx.read.outputs.result,
+            self.ctx.force_constants,
             self.ctx.path,
             code=self.inputs.code,
         )

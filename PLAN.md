@@ -166,7 +166,10 @@ Pure Python functions live in `operations.py` (AiiDA-free import chain); the
 
 ### 3.3 Composition (`aiida_pythonjob_ins.workflows`)
 Current workflows: `DispersionWorkChain` (band structure -> `BandsData`) and
-`DosWorkChain` (phonon DOS -> `XyData`), both reading force constants first.
+`DosWorkChain` (phonon DOS -> `XyData`). Both subclass `ForceConstantsWorkChain`
+(`workflows/base.py`), which accepts *either* a `castep_file` (read in-workflow via
+a PythonJob) *or* a pre-built `force_constants` node (e.g. from Phonopy) --
+exactly one, enforced by an input validator.
 
 - A `WorkChain` (or `aiida-workgraph` graph) that chains
   `read_force_constants → calculate_dispersion` and returns the band structure.
@@ -340,8 +343,9 @@ aiida_pythonjob_ins/
 │       ├── pythonjobs.py         # prepare_*_inputs (aiida-pythonjob wrappers)
 │       └── workflows/
 │           ├── __init__.py
+│           ├── base.py             # ForceConstantsWorkChain (castep_file XOR fc node)
 │           ├── dispersion.py       # DispersionWorkChain (calcfunctions + PythonJobs)
-│           └── dos.py              # DosWorkChain (read FC -> phonon DOS -> XyData)
+│           └── dos.py              # DosWorkChain (phonon DOS -> XyData)
 └── tests/
     ├── conftest.py                 # enable aiida pytest fixtures
     ├── data/                       # reference inputs (from Euphonic /inspect)
@@ -453,9 +457,11 @@ modelled on abinslib: furo theme, `sphinx-autoapi`, `sphinx-gallery`, myst).
    `q_spacing`, adaptive broadening), `conversions.spectrum1d_to_xydata`
    (`Spectrum1D` -> `XyData`), `pythonjobs.prepare_dos_inputs`, `DosWorkChain`;
    tests across ops/conversions/workflows.
-2. [ ] **Phonopy input**: `read_force_constants_from_phonopy` (relies on euphonic's
-   `phonopy-reader` extra), test data `tests/data/phonopy/NaCl_default/`; reuses
-   the dispersion + DOS workflows unchanged.
+2. [x] **Phonopy input**: `read_force_constants_from_phonopy` +
+   `prepare_read_phonopy_inputs` (euphonic's `phonopy-reader` extra is now
+   default-on), `ForceConstantsData.from_phonopy`, test data
+   `tests/data/phonopy/NaCl_default/`. Both workflows accept a `force_constants`
+   node (via `ForceConstantsWorkChain`), so bands + DOS work from Phonopy input.
 3. [ ] **Docs scaffold**: `docs/` (autoapi + gallery + furo, abinslib palette),
    `doc` dependency group, `build-docs.yml` (GitHub Pages), a shared gallery
    helper that loads a temporary SQLite profile + localhost code.

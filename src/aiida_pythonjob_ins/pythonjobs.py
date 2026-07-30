@@ -33,6 +33,7 @@ from aiida_pythonjob_ins.operations import (
     calculate_dos,
     interpolate_phonon_modes,
     read_force_constants_from_castep,
+    read_force_constants_from_phonopy,
 )
 from aiida_pythonjob_ins.serialization import (
     EUPHONIC_DESERIALIZERS,
@@ -48,8 +49,15 @@ __all__ = [
     "prepare_dos_inputs",
     "prepare_interpolation_inputs",
     "prepare_read_force_constants_inputs",
+    "prepare_read_phonopy_inputs",
     "read_force_constants_from_castep",
+    "read_force_constants_from_phonopy",
 ]
+
+
+def _staged_filename(file: str | orm.SinglefileData) -> str:
+    """Basename under which ``upload_files`` stages a file in the working dir."""
+    return file.filename if isinstance(file, orm.SinglefileData) else Path(file).name
 
 
 def prepare_interpolation_inputs(
@@ -91,15 +99,51 @@ def prepare_read_force_constants_inputs(
     reads it by basename and returns a ``ForceConstants`` serialized to a
     :class:`~aiida_pythonjob_ins.data.ForceConstantsData` node.
     """
-    filename = (
-        castep_file.filename
-        if isinstance(castep_file, orm.SinglefileData)
-        else Path(castep_file).name
-    )
+    filename = _staged_filename(castep_file)
     return prepare_pythonjob_inputs(
         function=read_force_constants_from_castep,
         function_inputs={"filename": filename},
         upload_files={"castep_file": castep_file},
+        serializers=EUPHONIC_SERIALIZERS,
+        deserializers=EUPHONIC_DESERIALIZERS,
+        computer=computer,
+        code=code,
+        **kwargs,
+    )
+
+
+def prepare_read_phonopy_inputs(
+    summary: str | orm.SinglefileData,
+    force_constants: str | orm.SinglefileData,
+    born: str | orm.SinglefileData | None = None,
+    *,
+    computer: str | orm.Computer = "localhost",
+    code: orm.AbstractCode | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Build inputs to run :func:`read_force_constants_from_phonopy` as a PythonJob.
+
+    The Phonopy ``summary`` (``phonopy.yaml``), ``force_constants`` (e.g.
+    ``FORCE_CONSTANTS``) and optional ``born`` (``BORN``) files are staged into the
+    working directory via ``upload_files``; the function reads them by basename and
+    returns a ``ForceConstants`` serialized to a ``ForceConstantsData`` node.
+    """
+    upload_files: dict[str, str | orm.SinglefileData] = {
+        "summary": summary,
+        "force_constants": force_constants,
+    }
+    function_inputs: dict[str, Any] = {
+        "summary_name": _staged_filename(summary),
+        "fc_name": _staged_filename(force_constants),
+    }
+    if born is not None:
+        upload_files["born"] = born
+        function_inputs["born_name"] = _staged_filename(born)
+
+    return prepare_pythonjob_inputs(
+        function=read_force_constants_from_phonopy,
+        function_inputs=function_inputs,
+        upload_files=upload_files,
         serializers=EUPHONIC_SERIALIZERS,
         deserializers=EUPHONIC_DESERIALIZERS,
         computer=computer,

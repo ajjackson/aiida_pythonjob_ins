@@ -76,6 +76,33 @@ def read_force_constants_from_castep(filename: str) -> ForceConstants:
     return ForceConstants.from_castep(filename)
 
 
+def read_force_constants_from_phonopy(
+    summary_name: str = "phonopy.yaml",
+    fc_name: str = "FORCE_CONSTANTS",
+    born_name: str | None = None,
+) -> ForceConstants:
+    """Read force constants from Phonopy output into ``ForceConstants``.
+
+    Thin wrapper over ``ForceConstants.from_phonopy`` (requires euphonic's
+    ``phonopy-reader`` extra, which this package installs by default). All names
+    are resolved in the working directory; when run as a PythonJob the files are
+    staged there via ``upload_files`` (see
+    :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_phonopy_inputs`).
+
+    ``born_name`` is optional (Born charges for LO-TO splitting); pass ``None`` to
+    skip it.
+    """
+    LOGGER.info(
+        "Reading force constants from Phonopy: summary=%s fc=%s born=%s",
+        summary_name,
+        fc_name,
+        born_name,
+    )
+    return ForceConstants.from_phonopy(
+        path=".", summary_name=summary_name, fc_name=fc_name, born_name=born_name
+    )
+
+
 def band_path_qpoints(
     cell: tuple[np.ndarray, np.ndarray, np.ndarray],
     q_spacing: float = 0.025,

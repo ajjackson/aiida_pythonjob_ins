@@ -34,11 +34,14 @@ dependencies = [
     "aiida-pythonjob~=0.5.2",
     # Euphonic: phonon/lattice-dynamics from force constants (SemVer-compliant).
     # https://euphonic.readthedocs.io
-    # Pinned to 2.x everywhere EXCEPT aarch64-Linux, where PyPI has no 2.x wheel
-    # yet; there we use a vendored 2.0.x pre-release wheel (see [tool.uv.sources]).
-    # Drop the second entry once an aarch64-Linux euphonic 2.x wheel is published.
-    "euphonic~=2.0; platform_machine != 'aarch64'",
-    "euphonic; platform_machine == 'aarch64'",
+    # The `phonopy-reader` extra (h5py + PyYAML) is default-on so phonopy input
+    # works out of the box, and its spec stays consistent with the euphonic
+    # version in use. Pinned to 2.x everywhere EXCEPT aarch64-Linux, where PyPI
+    # has no 2.x wheel yet; there we use a vendored 2.0.x pre-release wheel (see
+    # [tool.uv.sources]). Drop the second entry once an aarch64-Linux euphonic 2.x
+    # wheel is published.
+    "euphonic[phonopy-reader]~=2.0; platform_machine != 'aarch64'",
+    "euphonic[phonopy-reader]; platform_machine == 'aarch64'",
     # seekpath: we call `get_explicit_k_path_orig_cell` (the *_orig_cell path is
     # almost always preferable to the older get_*_path). 2.2.1 also carries
     # significant bugfixes and compatibility fixes. This matches Euphonic's own
@@ -46,10 +49,6 @@ dependencies = [
     # own reasons, not merely to track it. https://seekpath.readthedocs.io
     "seekpath>=2.2.1,<3",
 ]
-
-[project.optional-dependencies]
-# Euphonic's CASTEP .castep_bin reader needs no extras, but phonopy input does.
-phonopy = ["euphonic[phonopy-reader]"]
 
 [dependency-groups]
 # Dev/test tooling (PEP 735 group; installed by `uv sync`).

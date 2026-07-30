@@ -69,6 +69,17 @@ def test_crystal_roundtrip_and_structure_bridge(aiida_profile, quartz_castep_bin
     )
 
 
+def test_force_constants_from_phonopy(aiida_profile, phonopy_dir):
+    """ForceConstantsData.from_phonopy reads a Phonopy example (NaCl)."""
+    node = ForceConstantsData.from_phonopy(
+        path=str(phonopy_dir),
+        summary_name="phonopy.yaml",
+        fc_name="FORCE_CONSTANTS",
+        born_name="BORN",
+    )
+    assert node.get_force_constants().crystal.n_atoms == 8  # NaCl: 4 Na + 4 Cl
+
+
 def test_qpoint_phonon_modes_roundtrip(aiida_profile, quartz_castep_bin):
     """A stored+reloaded QpointPhononModesData reproduces frequencies."""
     force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
