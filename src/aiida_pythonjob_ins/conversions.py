@@ -15,7 +15,7 @@ Using ``BandsData`` also unlocks existing AiiDA plotting, e.g.
 ``bands.show_mpl()`` pops up a matplotlib band-structure plot without any
 AiiDALab dependency.
 
-**These are plain converter functions, deliberately NOT ``calcfunction``s.** They
+**These are plain converter functions, deliberately NOT calcfunctions.** They
 are the reusable "verbs" that *produce* an object (an AiiDA node or a euphonic
 object), called from contexts that each preclude the decorator: inside the
 workflow's calcfunctions (``generate_band_path``, ``assemble_bands``) and inside
@@ -82,9 +82,11 @@ def structure_to_crystal(structure: StructureData) -> Crystal:
 def structure_to_spglib_cell(
     structure: StructureData,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Convert a ``StructureData`` to the spglib/seekpath ``(lattice, positions,
-    numbers)`` tuple, reusing Euphonic's ``Crystal.to_spglib_cell`` (rather than
-    re-deriving the species numbering by hand).
+    """Convert a ``StructureData`` to a spglib/seekpath cell tuple.
+
+    Returns ``(lattice, positions, numbers)`` by reusing Euphonic's
+    ``Crystal.to_spglib_cell`` (rather than re-deriving the species numbering by
+    hand).
     """
     return structure_to_crystal(structure).to_spglib_cell()
 

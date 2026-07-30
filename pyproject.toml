@@ -57,6 +57,18 @@ dev = [
     "ruff>=0.10",
 ]
 
+# Documentation stack (Sphinx + autoapi + gallery + furo), modelled on abinslib.
+# Build with: `uv run --group doc make -C docs html` (needs system Graphviz + procps).
+doc = [
+    "sphinx>=8,<10",
+    "furo",
+    "sphinx-autoapi>=3.5",
+    "sphinx-gallery>=0.19",
+    "myst-parser>=4",
+    "matplotlib",
+    "graphviz",  # renders AiiDA provenance graphs (needs the system `dot`)
+]
+
 # --- AiiDA plugin entry points -------------------------------------------------
 # AiiDA discovers plugins via entry points; see
 # https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/plugins.html
@@ -143,5 +155,11 @@ ignore = [
     "ARG",     # pytest fixtures are passed as args but not always referenced
     "INP001",  # tests/ is intentionally not an importable package
     "S101",    # "assert" is a core part of pytest workflow
+]
+"docs/source/conf.py" = ["INP001"]  # Sphinx config is not a package module
+"docs/source/tutorials/*" = [
+    "INP001",  # gallery scripts are not an importable package
+    "E402",    # sphinx-gallery examples interleave prose cells and imports
+    "T201",    # `print` is useful narration in a tutorial
 ]
 

@@ -346,12 +346,23 @@ aiida_pythonjob_ins/
 │           ├── base.py             # ForceConstantsWorkChain (castep_file XOR fc node)
 │           ├── dispersion.py       # DispersionWorkChain (calcfunctions + PythonJobs)
 │           └── dos.py              # DosWorkChain (phonon DOS -> XyData)
-└── tests/
-    ├── conftest.py                 # enable aiida pytest fixtures
-    ├── data/                       # reference inputs (from Euphonic /inspect)
-    ├── test_data_types.py
-    ├── test_operations.py
-    └── test_workflows.py
+├── tests/
+│   ├── conftest.py                 # enable aiida pytest fixtures
+│   ├── data/                       # reference inputs: quartz.castep_bin, phonopy/
+│   ├── test_data_types.py
+│   ├── test_conversions.py
+│   ├── test_operations.py
+│   └── test_workflows.py
+└── docs/                           # Sphinx: autoapi + sphinx-gallery (furo)
+    ├── Makefile
+    └── source/
+        ├── conf.py
+        ├── index.rst
+        ├── _static/custom.css
+        └── tutorials/              # runnable gallery examples (plot_*.py)
+            ├── GALLERY_HEADER.rst
+            ├── _aiida_setup.py     # shared: temp profile, code, provenance render
+            └── plot_dispersion.py
 ```
 
 ---
@@ -462,12 +473,15 @@ modelled on abinslib: furo theme, `sphinx-autoapi`, `sphinx-gallery`, myst).
    default-on), `ForceConstantsData.from_phonopy`, test data
    `tests/data/phonopy/NaCl_default/`. Both workflows accept a `force_constants`
    node (via `ForceConstantsWorkChain`), so bands + DOS work from Phonopy input.
-3. [ ] **Docs scaffold**: `docs/` (autoapi + gallery + furo, abinslib palette),
-   `doc` dependency group, `build-docs.yml` (GitHub Pages), a shared gallery
-   helper that loads a temporary SQLite profile + localhost code.
-4. [ ] **Gallery tutorials**: runnable `plot_*.py` examples (quartz CASTEP
-   dispersion; NaCl phonopy bands + DOS) rendering result plots *and* AiiDA
-   provenance graphs (Graphviz). Requires `graphviz` + `procps` in the docs env.
+3. [x] **Docs scaffold**: `docs/` (autoapi + gallery + furo, abinslib palette),
+   `doc` dependency group, `build-docs.yml` (GitHub Pages), and the shared
+   `_aiida_setup.py` gallery helper (ephemeral SQLite profile + localhost code +
+   provenance rendering). Includes the first tutorial (`plot_dispersion.py`);
+   builds warning-free. `graphviz` + `procps` added to the repo `Containerfile`
+   and the docs CI.
+4. [ ] **More gallery tutorials**: add `plot_*.py` for phonon DOS and for the
+   Phonopy workflow (NaCl bands + DOS), each rendering result plots *and* AiiDA
+   provenance graphs. (Dispersion example already shipped in step 3.)
 
 ### Implementation notes / decisions made
 

@@ -94,6 +94,19 @@ spectrum = modes.get_dispersion()            # euphonic.Spectrum1D
 
 See `tests/` for runnable examples using the official AiiDA pytest fixtures.
 
+## Documentation
+
+Sphinx docs combine API reference (`sphinx-autoapi`) with a runnable tutorial
+gallery (`sphinx-gallery`): each example executes a real AiiDA workflow, plots the
+result, and visualises the provenance graph. Build them with:
+
+```bash
+uv run --group doc make -C docs html   # needs system Graphviz + procps
+```
+
+Output lands in `docs/build/html`. The gallery runs in a throwaway in-memory AiiDA
+profile, so it never touches your real `~/.aiida`.
+
 ## Logging
 
 The atomic operations emit progress messages through the standard `logging`

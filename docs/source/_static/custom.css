@@ -1,0 +1,7 @@
+/* Make the sphinx-gallery download buttons use the furo theme's gradient
+   variables (defined in conf.py), so they pick up light/dark mode. */
+.sphx-glr-download {
+    --sg-download-a-hover-background-color: var(--color-download-button-bg);
+    --sg-download-a-background-image: linear-gradient(
+        to bottom, var(--color-download-gradient-top), var(--color-download-gradient-bottom));
+}

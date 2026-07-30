@@ -16,3 +16,8 @@ dist/
 # Tool caches
 .ruff_cache/
 .pytest_cache/
+
+# Sphinx docs build + generated API/gallery output
+docs/build/
+docs/source/auto_examples/
+docs/source/autoapi/

@@ -4,7 +4,7 @@ These functions use only the **public** Euphonic API and know nothing about
 AiiDA, so they can be unit-tested directly and reused elsewhere. Crucially, this
 module's import chain is AiiDA-free (the package ``__init__`` is empty), so
 by-reference cloudpickling can target a lean remote environment (euphonic +
-seekpath + numpy, no aiida). They are turned into AiiDA ``PythonJob``s by the
+seekpath + numpy, no aiida). They are turned into AiiDA PythonJobs by the
 helpers in :mod:`aiida_pythonjob_ins.pythonjobs`.
 
 The dispersion workflow is built from composable pieces, mirroring
