@@ -95,7 +95,7 @@ select = [
     "B",      # flake8-bugbear
     "BLE",    # flake8-blind-except
     "C4",     # flake8-comprehensions
-    "C90",    # mccabe complexity
+    "C90",    # mccabe complexity (default threshold = 10)
     "COM",    # flake8-commas
     "E", "W", # pycodestyle
     "EM",     # flake8-errmsg
@@ -141,8 +141,6 @@ ignore = [
 "tests/**" = [
     "ARG",     # pytest fixtures are passed as args but not always referenced
     "INP001",  # tests/ is intentionally not an importable package
-    "S101",    # asserts are the whole point of a test
+    "S101",    # "assert" is a core part of pytest workflow
 ]
 
-[tool.ruff.lint.mccabe]
-max-complexity = 12
