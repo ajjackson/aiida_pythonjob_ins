@@ -15,7 +15,11 @@ from typing import Any
 from aiida import orm
 from aiida_pythonjob import prepare_pythonjob_inputs
 
-from ..serialization import EUPHONIC_DESERIALIZERS, EUPHONIC_SERIALIZERS
+from aiida_pythonjob_ins.serialization import (
+    EUPHONIC_DESERIALIZERS,
+    EUPHONIC_SERIALIZERS,
+)
+
 from .euphonic_ops import (
     calculate_dispersion,
     generate_qpoint_path,

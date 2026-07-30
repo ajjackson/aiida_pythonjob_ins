@@ -7,6 +7,7 @@ These verify that storing a Euphonic object in an AiiDA node and reading it back
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from euphonic import ForceConstants
 
 from aiida_pythonjob_ins.data import ForceConstantsData, QpointPhononModesData
@@ -35,8 +36,6 @@ def test_force_constants_from_castep_classmethod(aiida_profile, quartz_castep_bi
 
 def test_force_constants_type_validation(aiida_profile):
     """Passing a non-ForceConstants object raises TypeError."""
-    import pytest
-
     with pytest.raises(TypeError):
         ForceConstantsData("not a force constants object")
 

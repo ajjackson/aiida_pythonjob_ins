@@ -17,12 +17,13 @@ without relying on Euphonic's private ``_bands_from_force_constants`` helper:
 from __future__ import annotations
 
 import numpy as np
+import seekpath
 
 # Imported at module level (not under TYPE_CHECKING) because aiida-pythonjob
 # resolves the function's type hints at runtime via ``typing.get_type_hints``.
 from euphonic import ForceConstants, QpointPhononModes
 
-from ..qpoint_path import QpointPath
+from aiida_pythonjob_ins.qpoint_path import QpointPath
 
 
 def read_force_constants_from_castep(filename: str) -> ForceConstants:
@@ -41,8 +42,6 @@ def _seekpath_qpoints(
     insert_gamma: bool,
 ) -> tuple[np.ndarray, list[tuple[int, str]]]:
     """Return explicit q-points and ``(index, label)`` pairs for a band path."""
-    import seekpath
-
     # ``to_spglib_cell`` is public; seekpath works in the *original* cell so the
     # returned q-points are valid inputs to ``calculate_qpoint_phonon_modes``.
     structure = force_constants.crystal.to_spglib_cell()

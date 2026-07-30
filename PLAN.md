@@ -98,7 +98,9 @@
     with Euphonic's pin (pace-neutrons/Euphonic#457) but is set for our own
     reasons, not to track Euphonic.
   - Dev: `pytest`, `ruff` (AiiDA fixtures come from `aiida.tools.pytest_fixtures`;
-    the SQLite backend means no `pgtest`/PostgreSQL is required).
+    the SQLite backend means no `pgtest`/PostgreSQL is required). Ruff runs a broad
+    rule set modelled on Euphonic's (see `[tool.ruff.lint]` in `pyproject.toml`);
+    intra-package imports are absolute (satisfies TID252).
 
 ---
 

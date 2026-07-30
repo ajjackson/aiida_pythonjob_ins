@@ -54,7 +54,10 @@ EUPHONIC_DESERIALIZERS: dict[str, str] = {
 }
 
 
-def qpoint_path_to_kpoints_data(qpoint_path: Any, user: Any = None) -> KpointsData:
+def qpoint_path_to_kpoints_data(
+    qpoint_path: Any,
+    user: Any = None,  # noqa: ARG001 (required by aiida-pythonjob serializer signature)
+) -> KpointsData:
     """Serializer: QpointPath -> aiida.orm.KpointsData (positions + labels + cell)."""
     return qpoints_to_kpoints_data(
         qpoint_path.qpoints, qpoint_path.cell, labels=qpoint_path.labels

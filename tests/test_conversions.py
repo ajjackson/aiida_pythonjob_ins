@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import matplotlib as mpl
 import numpy as np
 from aiida.engine import run_get_node
 from aiida.orm import BandsData, KpointsData
@@ -51,9 +52,7 @@ def test_modes_data_to_native_types(aiida_profile, quartz_castep_bin):
 
 def test_bandsdata_matplotlib_export(aiida_profile, quartz_castep_bin, tmp_path):
     """BandsData renders a band-structure image via matplotlib (no AiiDALab)."""
-    import matplotlib
-
-    matplotlib.use("Agg")  # headless
+    mpl.use("Agg")  # headless
 
     force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
     modes = interpolate_phonon_modes(
@@ -64,7 +63,8 @@ def test_bandsdata_matplotlib_export(aiida_profile, quartz_castep_bin, tmp_path)
 
     out = tmp_path / "bands.png"
     bands.export(str(out), fileformat="mpl_png")
-    assert out.exists() and out.stat().st_size > 0
+    assert out.exists()
+    assert out.stat().st_size > 0
 
 
 def test_interpolation_from_kpoints_matches_direct(python_code, quartz_castep_bin):

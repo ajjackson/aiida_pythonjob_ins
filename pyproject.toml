@@ -86,5 +86,63 @@ line-length = 88
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-# A pragmatic default rule set for an exemplar project.
-select = ["E", "F", "I", "UP", "B", "SIM"]
+# A broad, exemplar-quality rule set modelled on Euphonic's selection
+# (https://github.com/pace-neutrons/Euphonic pyproject.toml), trimmed to the
+# stable rules that suit this smaller codebase.
+select = [
+    "A",      # flake8-builtins
+    "ARG",    # flake8-unused-arguments
+    "B",      # flake8-bugbear
+    "BLE",    # flake8-blind-except
+    "C4",     # flake8-comprehensions
+    "C90",    # mccabe complexity
+    "COM",    # flake8-commas
+    "E", "W", # pycodestyle
+    "EM",     # flake8-errmsg
+    "EXE",    # flake8-executable
+    "F",      # pyflakes
+    "FA",     # flake8-future-annotations
+    "FLY",    # flynt
+    "G",      # flake8-logging-format
+    "I",      # isort
+    "ICN",    # flake8-import-conventions
+    "INP",    # flake8-no-pep420
+    "ISC",    # flake8-implicit-str-concat
+    "LOG",    # flake8-logging
+    "N",      # pep8-naming
+    "NPY",    # NumPy-specific rules
+    "PERF",   # Perflint
+    "PGH",    # pygrep-hooks
+    "PIE",    # flake8-pie
+    "PLC", "PLE", "PLW",  # pylint (skip the noisier PLR refactors)
+    "PT",     # flake8-pytest-style
+    "PTH",    # flake8-use-pathlib
+    "Q",      # flake8-quotes
+    "RET",    # flake8-return
+    "RSE",    # flake8-raise
+    "RUF",    # Ruff-specific rules
+    "S",      # flake8-bandit (security)
+    "SIM",    # flake8-simplify
+    "SLF",    # flake8-self
+    "SLOT",   # flake8-slots
+    "T10",    # flake8-debugger
+    "T20",    # flake8-print
+    "TID",    # flake8-tidy-imports
+    "TRY",    # tryceratops
+    "UP",     # pyupgrade
+    "YTT",    # flake8-2020
+]
+ignore = [
+    "COM812",  # trailing comma; conflicts with the formatter
+    "ISC001",  # single-line implicit string concat; conflicts with the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "ARG",     # pytest fixtures are passed as args but not always referenced
+    "INP001",  # tests/ is intentionally not an importable package
+    "S101",    # asserts are the whole point of a test
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12

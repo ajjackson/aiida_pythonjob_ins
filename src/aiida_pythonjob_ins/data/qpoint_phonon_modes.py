@@ -12,7 +12,11 @@ from typing import ClassVar
 from aiida.orm import BandsData, KpointsData
 from euphonic import QpointPhononModes
 
-from ..conversions import modes_to_bands_data, qpoints_to_kpoints_data
+from aiida_pythonjob_ins.conversions import (
+    modes_to_bands_data,
+    qpoints_to_kpoints_data,
+)
+
 from .base import EuphonicJSONData
 
 

@@ -20,13 +20,13 @@ from aiida.engine import ToContext, WorkChain, calcfunction
 from aiida.orm import AbstractCode, BandsData, Float, KpointsData, SinglefileData
 from aiida_pythonjob import PythonJob
 
-from ..calculations import (
+from aiida_pythonjob_ins.calculations import (
     prepare_interpolation_inputs,
     prepare_qpoint_path_inputs,
     prepare_read_force_constants_inputs,
 )
-from ..conversions import modes_to_bands_data
-from ..data import QpointPhononModesData
+from aiida_pythonjob_ins.conversions import modes_to_bands_data
+from aiida_pythonjob_ins.data import QpointPhononModesData
 
 
 @calcfunction
