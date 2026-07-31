@@ -566,13 +566,73 @@ modelled on abinslib: furo theme, `sphinx-autoapi`, `sphinx-gallery`, myst).
 
 ---
 
-## 10. Open items to confirm during implementation
+## 11. Early open items (resolved during implementation)
 
-- Exact force-constants input format for the first test (CASTEP `.castep_bin`
-  vs Phonopy) — decide from what `/inspect` provides.
-- Whether `aiida-pythonjob` needs custom serializers for our Data types, or if
-  thin `calcfunction` adapters around plain Euphonic objects are cleaner.
-- q-path specification API for `calculate_dispersion` (explicit q-points vs
-  seekpath/spglib high-symmetry path); prefer public, well-documented input.
-</content>
-</invoke>
+Kept for history; all resolved as the code was written.
+
+- Force-constants input format: **resolved** -- both CASTEP (`.castep_bin`) and
+  Phonopy inputs are supported.
+- Custom serializers vs `calcfunction` adapters: **resolved** -- custom
+  serializers/deserializers bridge our Data types (see `serialization.py`).
+- q-path specification: **resolved** -- seekpath high-symmetry path via
+  `generate_band_path`.
+
+---
+
+## 12. TODO / to investigate (not yet actioned)
+
+Open investigation items. None are started; each is written to be picked up cold.
+Each item records a **Decision** where the maintainer has made one.
+
+1. **Audit AiiDA entry points; use factory functions in examples/docs.**
+   - Context: our plugin registers `aiida.data` entry points
+     (`pythonjob_ins.crystal|force_constants|qpoint_phonon_modes`) and
+     `aiida.workflows` (`pythonjob_ins.dispersion|dos`) in `pyproject.toml`. Code
+     and tests currently reach classes by *direct import*
+     (`from aiida_pythonjob_ins.workflows import DispersionWorkChain`).
+   - Investigate: are the entry points correct and complete (names, node
+     `node_type` strings, `verdi plugin list aiida.data|aiida.workflows`, no
+     duplicates)? Then show the idiomatic discovery path in docs/examples using
+     `aiida.plugins` factories:
+     `DataFactory("pythonjob_ins.force_constants")`,
+     `WorkflowFactory("pythonjob_ins.dispersion")`
+     (and `CalculationFactory` if a CalcJob is ever added).
+   - Why it matters: factories are how AiiDA users are expected to load plugin
+     classes; demonstrating them validates the entry points end to end.
+   - Files: `pyproject.toml` (entry points), `docs/source/tutorials/plot_*.py`.
+   - **Decision**: follow AiiDA's convention of using factories heavily in the
+     documentation. Load plugin classes via factories in the tutorials
+     (`WorkflowFactory`/`DataFactory`), and state the equivalent direct import
+     clearly at least once so the mapping is obvious. Tests may keep direct
+     imports.
+
+2. **Auto-generate the workflows docs page as workflows are added.**
+   - Context: `docs/source/workflows.rst` manually lists one
+     `.. aiida-workchain::` directive per WorkChain. This will drift as workflows
+     are added.
+   - Investigate: generate the page (or its directive list) automatically from the
+     registered `aiida.workflows` entry points whose name starts with
+     `pythonjob_ins.` -- e.g. a tiny `conf.py` hook that writes `workflows.rst`
+     at build time, or a small custom directive that loops over entry points.
+   - Why it matters: keeps API docs complete without manual edits.
+   - Files: `docs/source/workflows.rst`, `docs/source/conf.py`.
+   - **Decision**: prefer a build-time `conf.py` hook (consistent with how we use
+     AutoAPI elsewhere); only fall back to an explicit custom directive if the
+     hook turns out to be too complex or messy.
+
+3. **Reconcile "WorkChain classes hidden from autoapi" with the code layout.**
+   - Context: `conf.py` has an `autoapi-skip-member` handler that drops
+     `*WorkChain` classes from the autoapi tree (they only exposed outline-step
+     methods, not the runtime spec; the spec is shown by the `aiida-workchain`
+     directive in `workflows.rst`). Result: the autoapi page for
+     `aiida_pythonjob_ins.workflows.*` no longer lists the classes that exist in
+     the source -- a docs/code mismatch that could confuse readers.
+   - Investigate better options, e.g.: (a) keep the class in autoapi but replace
+     its member list with (or link to) the `aiida-workchain` spec; (b) a custom
+     autoapi Jinja template for WorkChain classes; (c) cross-references between the
+     autoapi module page and `workflows.rst`; (d) accept the current split but add
+     a note on the autoapi page.
+   - Why it matters: an exemplar should not have API docs that silently omit
+     public classes.
+   - Files: `docs/source/conf.py` (`_skip_workchains`), `docs/source/workflows.rst`.
+   - **Decision**: deferred -- revisit later.
