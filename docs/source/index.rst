@@ -22,4 +22,5 @@ graph. They can be downloaded as Jupyter notebooks for experimentation.
 
    auto_examples/index
    workflows
+   design_notes
    autoapi/index
