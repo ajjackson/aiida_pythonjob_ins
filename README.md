@@ -1,5 +1,8 @@
 # aiida-pythonjob-ins
 
+**This is a prototype thrown together quickly with agentic coding. DO NOT USE IN PRODUCTION.**
+
+
 Proof-of-concept [AiiDA](https://www.aiida.net/) plugin that wraps inelastic
 neutron scattering (INS) Python libraries — starting with
 [Euphonic](https://euphonic.readthedocs.io/) — using the

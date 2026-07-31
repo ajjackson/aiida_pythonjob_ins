@@ -9,8 +9,8 @@ neutron scattering (INS) Python libraries -- starting with
 
 .. important::
 
-   Proof-of-concept / alpha: names and APIs will change. Pin to a minor version
-   if you build on it.
+    This is a prototype, put together quickly with agentic coding. Do
+    not use in production unless you are willing to review the code!
 
 The worked examples below are executed when the documentation is built: each runs
 a real AiiDA workflow, plots the result, and visualises the resulting provenance
