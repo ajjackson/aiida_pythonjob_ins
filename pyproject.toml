@@ -36,12 +36,9 @@ dependencies = [
     # https://euphonic.readthedocs.io
     # The `phonopy-reader` extra (h5py + PyYAML) is default-on so phonopy input
     # works out of the box, and its spec stays consistent with the euphonic
-    # version in use. Pinned to 2.x everywhere EXCEPT aarch64-Linux, where PyPI
-    # has no 2.x wheel yet; there we use a vendored 2.0.x pre-release wheel (see
-    # [tool.uv.sources]). Drop the second entry once an aarch64-Linux euphonic 2.x
-    # wheel is published.
-    "euphonic[phonopy-reader]~=2.0; platform_machine != 'aarch64'",
-    "euphonic[phonopy-reader]; platform_machine == 'aarch64'",
+    # version in use. Pinned to 2.x. On aarch64-Linux, local wheels in wheels/
+    # are found via tool.uv.find-links.
+    "euphonic[phonopy-reader]~=2.0",
     # seekpath: we call `get_explicit_k_path_orig_cell` (the *_orig_cell path is
     # almost always preferable to the older get_*_path). 2.2.1 also carries
     # significant bugfixes and compatibility fixes. This matches Euphonic's own
@@ -82,14 +79,11 @@ doc = [
 "pythonjob_ins.dos" = "aiida_pythonjob_ins.workflows.dos:DosWorkChain"
 
 # --- Euphonic wheel workaround (aarch64-Linux only) ----------------------------
-# There is no aarch64-Linux Euphonic wheel on PyPI yet (2.0.0 ships x86-64 Linux,
-# macOS arm64, and Windows wheels only). On aarch64-Linux we point uv at the
-# vendored wheel; on any other platform (e.g. x86-64 CI) this source is skipped
-# and euphonic resolves from PyPI. Delete this block once aarch64-Linux wheels ship.
-[tool.uv.sources]
-euphonic = [
-    { path = "wheels/euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", marker = "platform_machine == 'aarch64'" },
-]
+# On aarch64-Linux, PyPI has no 2.x wheel yet. `find-links = ["wheels"]` allows uv
+# to find local wheels placed in `wheels/` on aarch64, while on x86_64 CI (where
+# wheels/ is empty or missing), uv installs euphonic directly from PyPI.
+[tool.uv]
+find-links = ["wheels"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

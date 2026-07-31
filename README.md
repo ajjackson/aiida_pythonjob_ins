@@ -22,10 +22,10 @@ uv run pytest    # run the test suite
 
 ### aarch64 Euphonic wheel (local workaround)
 
-Euphonic is pinned to `~=2.0`, except on **aarch64-Linux**, where PyPI has no
-2.x wheel yet. There, `uv` installs a vendored 2.0.x pre-release wheel from `wheels/`
-(selected via a `platform_machine == 'aarch64'` marker in `pyproject.toml`); on
-every other platform (e.g. x86-64 CI) Euphonic 2.x resolves from PyPI normally.
+Euphonic is pinned to `~=2.0`. On **aarch64-Linux**, PyPI has no 2.x wheel yet,
+so `uv` finds a local 2.0.x pre-release wheel in `wheels/` via `tool.uv.find-links`
+in `pyproject.toml`. On x86-64 CI (where `wheels/` is empty or missing), `uv` installs
+Euphonic 2.x directly from PyPI normally.
 
 The wheel is **not** committed (see `.gitignore`). On aarch64-Linux, place it
 manually:
@@ -35,8 +35,8 @@ mkdir -p wheels
 # extract euphonic-...aarch64.whl into wheels/
 ```
 
-Once an aarch64-Linux Euphonic 2.x wheel is published, delete the vendored-wheel
-dependency entry and the `[tool.uv.sources]` block.
+Once an aarch64-Linux Euphonic 2.x wheel is published, delete the `[tool.uv]`
+block from `pyproject.toml`.
 
 ## What's implemented
 

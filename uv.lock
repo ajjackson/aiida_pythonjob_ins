@@ -82,7 +82,7 @@ dependencies = [
     { name = "aiida-core" },
     { name = "aiida-pythonjob" },
     { name = "euphonic", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, extra = ["phonopy-reader"], marker = "platform_machine != 'aarch64'" },
-    { name = "euphonic", version = "2.0.1.dev1", source = { path = "wheels/euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl" }, extra = ["phonopy-reader"], marker = "platform_machine == 'aarch64'" },
+    { name = "euphonic", version = "2.0.1.dev1", source = { registry = "wheels" }, extra = ["phonopy-reader"], marker = "platform_machine == 'aarch64'" },
     { name = "seekpath" },
 ]
 
@@ -105,8 +105,7 @@ doc = [
 requires-dist = [
     { name = "aiida-core", specifier = ">=2.6,<3" },
     { name = "aiida-pythonjob", specifier = "~=0.5.2" },
-    { name = "euphonic", extras = ["phonopy-reader"], marker = "platform_machine != 'aarch64'", specifier = "~=2.0" },
-    { name = "euphonic", extras = ["phonopy-reader"], marker = "platform_machine == 'aarch64'", path = "wheels/euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl" },
+    { name = "euphonic", extras = ["phonopy-reader"], specifier = "~=2.0" },
     { name = "seekpath", specifier = ">=2.2.1,<3" },
 ]
 
@@ -601,7 +600,7 @@ phonopy-reader = [
 [[package]]
 name = "euphonic"
 version = "2.0.1.dev1"
-source = { path = "wheels/euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl" }
+source = { registry = "wheels" }
 resolution-markers = [
     "platform_machine == 'aarch64'",
 ]
@@ -617,7 +616,7 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 wheels = [
-    { filename = "euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:225637769448fed6daf000499db15699f6c7150878412273467e73336b1bba91" },
+    { path = "euphonic-2.0.1.dev1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl" },
 ]
 
 [package.optional-dependencies]
@@ -625,24 +624,6 @@ phonopy-reader = [
     { name = "h5py" },
     { name = "pyyaml" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "brille", marker = "(platform_machine not in 'aarch64 arm64' and extra == 'brille') or (sys_platform != 'linux' and extra == 'brille')", specifier = ">=0.7.0" },
-    { name = "h5py", marker = "extra == 'phonopy-reader'", specifier = ">=3.6.0" },
-    { name = "matplotlib", marker = "extra == 'matplotlib'", specifier = ">=3.8.0" },
-    { name = "numpy", specifier = ">=1.24.0" },
-    { name = "packaging" },
-    { name = "pint", specifier = ">=0.22" },
-    { name = "pyyaml", marker = "extra == 'phonopy-reader'", specifier = ">=6.0" },
-    { name = "scipy", specifier = ">=1.10" },
-    { name = "seekpath", specifier = ">=2.2.1,<3" },
-    { name = "spglib", specifier = ">=2.1.0" },
-    { name = "threadpoolctl", specifier = ">=3.0.0" },
-    { name = "toolz", specifier = ">=0.12.1" },
-    { name = "typing-extensions", specifier = "~=4.0" },
-]
-provides-extras = ["matplotlib", "phonopy-reader", "phonopy-reader", "brille"]
 
 [[package]]
 name = "executing"
