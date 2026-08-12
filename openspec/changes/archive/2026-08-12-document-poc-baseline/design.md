@@ -27,13 +27,15 @@ Constraints that shaped everything else:
 - `aiida-pythonjob` reads AiiDA configuration at *import* time to build its
   serializer registry, so merely importing this package requires a configuration
   to exist.
-- Euphonic has no aarch64 Linux wheel on PyPI for 2.x, while the development
-  machine for this project is aarch64.
+- Euphonic has no aarch64 Linux wheel on PyPI for 2.x, and aarch64 Linux is one of
+  the environments the project is developed on, alongside x86-64 Linux.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
+- Put existing scientific packages onto an AiiDA provenance graph, and nothing
+  more. This is a wrapper layer.
 - Keep the scientific code ordinary, importable Python that can be tested without
   AiiDA and executed in an environment that has never heard of AiiDA.
 - Prefer AiiDA's native materials-science types at every boundary where one fits,
@@ -42,6 +44,17 @@ Constraints that shaped everything else:
 
 **Non-Goals:**
 
+- Method development, or any scientific implementation of its own. The physics
+  belongs to the upstream packages - `euphonic`, `seekpath`, and `abinslib` and
+  `resins` in future - where it is tested and validated against scientific
+  criteria, independently of AiiDA. Those projects have the domain expertise, the
+  reference data and the user community to judge such work; this package has
+  none of the three. Anything here that starts to resemble a method, a correction
+  or a numerical choice with scientific consequences is a sign that the work is
+  in the wrong repository and should be contributed upstream instead. The
+  practical test is that every number this package produces should be
+  reproducible by calling the upstream library directly, which is exactly what
+  the equivalence tests assert.
 - Optimising for scale. Correctness and clarity were chosen over performance
   wherever the two conflicted.
 - Supporting remote schedulers in practice. The standard `Computer`/`Code` hooks
@@ -55,11 +68,20 @@ Euphonic ships a command-line interface, so the conventional AiiDA approach woul
 be a `CalcJob` plus a `Parser` that writes and reads files. Instead the plugin
 runs Euphonic's Python API directly through `aiida-pythonjob`.
 
-*Why:* the scientific logic stays as ordinary functions operating on real objects,
-rather than being flattened into command-line arguments and reconstructed from
-output files. *Rejected:* `CalcJob` wrapping, which would have forced every
-intermediate through a file format and lost the eigenvectors that
-`QpointPhononModes` carries.
+*Why:* maintenance. The Python API is the upstream projects' full surface, so a
+new capability can be wrapped as soon as it appears there. A CLI wrapper can only
+reach what the command line exposes, which means new features must first be given
+an argument, an output format and a stable textual contract upstream before this
+plugin can use them - and those additions are constrained by what a command line
+can reasonably express. The scientific logic also stays as ordinary functions
+operating on real objects, rather than being flattened into command-line
+arguments and reconstructed from output files.
+
+*Rejected:* `CalcJob` wrapping. Not because a CLI could not in principle carry any
+particular quantity - `QpointPhononModes` can be written to a file - but because
+each exchanged object would depend on an upstream textual interface existing,
+remaining stable, and round-tripping without loss, which is a standing
+coordination cost with the upstream projects for no benefit this plugin needs.
 
 ### The scientific layer is physically separated from the AiiDA layer
 
@@ -91,7 +113,7 @@ By-value is *not* a supported mode of this package. `register_pickle_by_value`
 appears only in a docstring and in `design_notes.rst`; no code sets it and no test
 exercises it. Because the builders forward unrecognised keyword arguments to
 aiida-pythonjob, a caller could pass it, but nothing here has verified that the
-result works. See deferred item 10.
+result works. See deferred item 9.
 
 ### Custom Data nodes store Euphonic's own JSON in the node repository
 
@@ -251,7 +273,7 @@ repository that never needs it in CI.
   in CI only; revisit if that happens.
 - **Python is pinned to exactly 3.12** by that wheel → this constrains every user
   on every platform for the sake of one local workaround, and no code here needs
-  3.12; recorded as deferred item 11, and item 3 would remove its cause.
+  3.12; recorded as deferred item 11, and item 12 would remove its cause.
 - **A single exit code (400) covers any failed job step** → adequate for a
   proof-of-concept, but a caller cannot distinguish which step failed without
   inspecting the graph.
@@ -386,6 +408,11 @@ section numbers below record where each item originated.
    is an exact three modes per atom rather than the truncated 2.9959 seen today.
    Found while reviewing this baseline.
 
+   Worth noting against the wrapper-layer non-goal above: the axis is generated
+   here rather than by Euphonic, which is why this package is in a position to get
+   it wrong at all. Whether the range construction belongs upstream is a fair
+   question for that change to ask.
+
 8. **Surface workflow exit codes in the documentation, and correct the claim that
    they already are.** The `aiida-workchain` directive renders inputs, outputs and
    the outline, but not exit codes: `ERROR_SUB_PROCESS_FAILED` appears nowhere in
@@ -440,6 +467,17 @@ section numbers below record where each item originated.
     the constraint. Replace it with a range reflecting what the package and its
     dependencies actually support, and confine the wheel's interpreter constraint
     to the local aarch64 workaround. Doing so makes the CI matrix a real choice
-    rather than a foregone conclusion, and item 3 (aarch64 wheels reaching PyPI)
+    rather than a foregone conclusion, and item 12 (aarch64 wheels reaching PyPI)
     would remove the underlying cause entirely. Found while reviewing this
     baseline.
+
+12. **Remove the local wheel workaround once Euphonic publishes aarch64 wheels.**
+    `[tool.uv] find-links = ["wheels"]` exists only because PyPI carries no
+    aarch64 Linux wheel for Euphonic 2.x, which forces developers on that
+    platform to obtain and place one by hand. When upstream publishes, delete the
+    `[tool.uv]` block, the `wheels/` directory and its `.gitignore` entry, and the
+    README section describing the manual step; then remove the corresponding
+    scenarios from `plugin-packaging`. This also clears the way for item 11, since
+    the interpreter pin exists only to keep resolution compatible with that wheel,
+    and it makes a multi-platform CI matrix cheap. Recorded during this baseline
+    as the follow-up the packaging decision already anticipated.

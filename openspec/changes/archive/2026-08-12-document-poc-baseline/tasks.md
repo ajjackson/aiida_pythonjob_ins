@@ -39,7 +39,7 @@ the source of the behaviour captured in `specs/`. No further work.
 
 ## 5. Close out
 
-- [ ] 5.1 Review the specs as a set for gaps or overlaps between capabilities
-- [ ] 5.2 Confirm the consolidated "Deferred work" list in `design.md` is complete and accurate before archiving, since it is the durable record of what this baseline deliberately left undone
-- [ ] 5.3 Archive the change so the deltas become the main specs in `openspec/specs/`
-- [ ] 5.4 Commit from the host, since the container has no push credentials
+- [x] 5.1 Review the specs as a set for gaps or overlaps between capabilities - found and fixed one internal contradiction in `phonon-operations`, where the imaginary-frequency requirement forbids discarding modes while the density-of-states requirement records an axis that drops them; the two now cross-reference, with the shortfall named as a defect rather than an exemption. The equivalence requirements in `pythonjob-execution` and `testing-and-ci` overlap but were kept: one is a product contract, the other constrains how tests are written
+- [x] 5.2 Confirm the consolidated "Deferred work" list in `design.md` is complete and accurate before archiving, since it is the durable record of what this baseline deliberately left undone - twelve items; added item 12 (remove the wheel workaround once aarch64 wheels are published), which the packaging decision anticipated but the list omitted, and corrected two stale cross-references that pointed at the wrong item numbers
+- [x] 5.3 Archive the change so the deltas become the main specs in `openspec/specs/` - synced 8 capabilities, 47 requirements, 106 scenarios, all pure ADDED into an empty specs directory
+- [x] 5.4 Commit from the host, since the container has no push credentials

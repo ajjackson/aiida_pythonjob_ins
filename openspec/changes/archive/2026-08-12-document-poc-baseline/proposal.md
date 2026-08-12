@@ -67,7 +67,7 @@ None - `openspec/specs/` is currently empty, so every capability here is new.
 
 ## Non-goals
 
-- Implementing anything new. Eleven follow-up items are deliberately left out and
+- Implementing anything new. Twelve follow-up items are deliberately left out and
   recorded together in `design.md` under "Deferred work"; each should become its
   own change proposed against these baseline specs.
 - Re-litigating decisions already taken. Where the implementation settled a

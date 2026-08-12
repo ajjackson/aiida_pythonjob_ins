@@ -129,6 +129,12 @@ the acoustic branches. Both cases are scientifically meaningful and must reach t
 user. Operations SHALL propagate imaginary frequencies unaltered: they SHALL NOT
 be clipped to zero, discarded, or replaced by their magnitude.
 
+One current behaviour falls short of this: an automatically generated
+density-of-states energy axis starts at zero, so imaginary modes fall outside it
+and contribute no weight, as the density-of-states requirement below records.
+That is a known defect rather than an intended exemption, and correcting it is
+deferred work against this capability.
+
 #### Scenario: Imaginary modes reach the caller unchanged
 
 - **WHEN** interpolation yields one or more imaginary frequencies, represented as
