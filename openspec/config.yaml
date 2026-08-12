@@ -1,0 +1,90 @@
+schema: spec-driven
+
+context: |
+  Project: `aiida-pythonjob-ins` (import package `aiida_pythonjob_ins`) is an
+  AiiDA plugin that runs inelastic-neutron-scattering / lattice-dynamics Python
+  libraries -- currently Euphonic -- through the `aiida-pythonjob` execution
+  model rather than command-line entry-point wrappers. It is a proof-of-concept
+  and an exemplar: clarity, idiomatic AiiDA usage and well-cited comments matter
+  more than feature coverage.
+
+  Stack: Python 3.12 (pinned by the vendored Euphonic wheel); `uv` for
+  environments and dependencies; `pytest` with `aiida.tools.pytest_fixtures`
+  (SQLite backend, so no PostgreSQL); `ruff` for lint and format; Sphinx with
+  sphinx-autoapi, sphinx-gallery and the furo theme for docs; GitHub Actions on
+  x86-64.
+
+  Key dependencies: `aiida-core>=2.6,<3`, `aiida-pythonjob~=0.5.2`,
+  `euphonic~=2.0` (aarch64 Linux installs a vendored pre-release wheel from
+  `wheels/` until an aarch64 wheel reaches PyPI), `seekpath>=2.2.1,<3`.
+
+  Architecture:
+  - `operations.py` -- pure Euphonic functions; its import chain is deliberately
+    AiiDA-free so aiida-pythonjob can cloudpickle them *by reference* into a lean
+    remote environment.
+  - `pythonjobs.py` -- `prepare_*_inputs` builders wrapping those functions as
+    PythonJobs.
+  - `serialization.py` -- serializer/deserializer bridge between custom Data
+    nodes and Euphonic objects.
+  - `conversions.py` -- maps Euphonic objects onto native AiiDA types
+    (`StructureData`, `KpointsData`, `BandsData`, `XyData`).
+  - `data/` -- Data nodes storing Euphonic objects as JSON in the node
+    repository.
+  - `workflows/` -- WorkChains composing PythonJobs and calcfunctions.
+
+  Conventions:
+  - Use only Euphonic's public API; never private helpers.
+  - Keep `operations.py` and everything it imports free of AiiDA.
+  - A PythonJob function must return plain Python, never an AiiDA node; nodes are
+    built parent-side by serializers or calcfunctions.
+  - Absolute intra-package imports (ruff TID252).
+  - Library code only emits logging -- it never configures handlers or levels --
+    and never uses `print` (ruff T20). WorkChains report via `self.report()`.
+  - Bound dependency pins by this package's own API usage. Avoid narrow pins that
+    could conflict with sibling AiiDA plugins sharing a resolver.
+  - Tests prefer equivalence against a direct public-API Euphonic call over
+    hard-coded reference values.
+
+  Domain: phonons derived from interatomic force constants -- Fourier
+  interpolation onto q-points, high-symmetry band paths via seekpath, dispersion
+  (band structure) and density of states.
+
+  History: this project was built before OpenSpec was adopted. `PLAN.md` is the
+  pre-OpenSpec planning document and remains the reference for original intent
+  and for design decisions recorded during implementation.
+
+rules:
+  proposal:
+    - State plainly when a change documents already-implemented behaviour rather
+      than proposing new work.
+    - Include a "Non-goals" section.
+  specs:
+    - Requirements describe externally observable behaviour. Put rationale,
+      tradeoffs and rejected alternatives in design.md, not here.
+    - Scenarios must be verifiable, but state the contract rather than
+      transcribing an existing test. Avoid fixture-specific values such as atom
+      counts, file names or material names; prefer equivalence against the
+      reference implementation, or relations that hold for any valid input.
+    - Name public API types exactly as they appear in the source (for example
+      `ForceConstantsData`, `QpointPhononModes`, `BandsData`), since those names
+      are part of the contract. Do not name internal helpers, private functions
+      or module paths, which are implementation detail.
+  design:
+    - Record why a decision was taken and what was rejected, citing the upstream
+      AiiDA, aiida-pythonjob or Euphonic documentation that justifies it.
+  tasks:
+    - Mark work already completed by earlier development as done rather than
+      restating it as future work.
+
+operations:
+  apply:
+    guidance:
+      - Run `uv run pytest` and `uv run ruff check` before marking implementation
+        tasks complete.
+      - On aarch64 the vendored Euphonic wheel must be present in `wheels/`
+        before `uv sync` will succeed; ask the user to supply it rather than
+        working around the dependency.
+  archive:
+    guidance:
+      - Once a capability is captured in the main specs, remove the duplicated
+        detail from `PLAN.md` instead of maintaining two sources of truth.
