@@ -12,11 +12,13 @@ their respective material:
   constraints, the serializer architecture, pickling modes, pytest setup). It is
   published as part of the documentation. This design doc references it instead
   of duplicating it.
-- `PLAN.md` - the pre-OpenSpec planning document, retained for history. It has
-  already drifted from the code in at least one place (its §6 describes the
-  aarch64 wheel workaround as a `[tool.uv.sources]` entry with a platform marker;
-  the implementation now uses `[tool.uv] find-links`), which is itself an argument
-  for retiring it in favour of specs.
+- `PLAN.md` - the pre-OpenSpec planning document, deleted by this change and now
+  recoverable only from git history. Section numbers cited below refer to it as it
+  stood at that point. It had already drifted from the code in at least one place
+  (its §6 described the aarch64 wheel workaround as a `[tool.uv.sources]` entry
+  with a platform marker, while the implementation had moved to
+  `[tool.uv] find-links`), which is itself the argument for retiring it in favour
+  of specs that are validated.
 
 Constraints that shaped everything else:
 
@@ -247,29 +249,39 @@ repository that never needs it in CI.
 - **The aarch64 development wheel is a pre-release (2.0.1.dev1) while CI resolves
   2.0.0** → both are 2.x with the same public API, but a difference could surface
   in CI only; revisit if that happens.
-- **Python is pinned to exactly 3.12** by that wheel → relax once aarch64 wheels
-  reach PyPI; the pin is documented as a wheel consequence, not a language
-  requirement.
+- **Python is pinned to exactly 3.12** by that wheel → this constrains every user
+  on every platform for the sake of one local workaround, and no code here needs
+  3.12; recorded as deferred item 11, and item 3 would remove its cause.
 - **A single exit code (400) covers any failed job step** → adequate for a
   proof-of-concept, but a caller cannot distinguish which step failed without
   inspecting the graph.
 - **The AutoAPI tree omits WorkChain classes** → readers may not find them where
   they expect; tracked as a follow-up.
 - **Documentation and planning text can drift from code**, as PLAN.md §6 already
-  has → mitigated by generating what can be generated, and by replacing PLAN.md
-  with specs that are validated.
+  had → mitigated by generating what can be generated, and by replacing PLAN.md
+  with specs that are validated. Three further instances were found while
+  reviewing these specs - `workflows.rst` claiming the workflow pages render exit
+  codes, `pythonjobs.py` advertising by-value pickling that nothing exercises, and
+  `openspec/config.yaml` still describing PLAN.md in the present tense - so the
+  risk is demonstrated rather than hypothetical, and validation covers only the
+  specs themselves.
 
 ## Migration Plan
 
 No code migration: this change alters no runtime behaviour.
 
 The documentation migration is the point of the change. On archive, the eight
-delta specs become `openspec/specs/`, and `PLAN.md` is reduced to a short
-historical pointer rather than deleted, so existing references to it still land
-somewhere useful. Material moves as follows:
+delta specs become `openspec/specs/`. `PLAN.md` itself is deleted rather than
+reduced to a pointer: a stub would be a third document to keep current, and the
+file remains in git history for anyone needing an original wording. Every
+reference to it - two in `README.md`, one in `pyproject.toml`, one each in
+`pythonjobs.py` and `serialization.py` - was repointed at the destination below,
+citing named sections of `design_notes.rst` rather than section numbers, since
+numbered references are what rotted invisibly. Material moves as follows:
 
 | PLAN.md section | Destination |
 |---|---|
+| §0 reference links, §1 goals and out-of-scope list | `README.md` |
 | §1 goals, §9/§10 milestone outcomes | the capability specs |
 | §3 architecture, §3.5-§3.7 execution and conversion model | this design doc and `docs/source/design_notes.rst` |
 | §2 dependency policy, §5 entry points, §6 wheel | `plugin-packaging` spec |
@@ -286,8 +298,9 @@ shape, not an unresolved decision.
 ## Deferred work
 
 The consolidated list of follow-ups, each to become its own change proposed
-against these specs. Recorded here so they are not scattered across the
-proposal, the task list and PLAN.md.
+against these specs. Recorded here so they are not scattered across the proposal,
+the task list and the planning document this change deletes. The `PLAN.md`
+section numbers below record where each item originated.
 
 1. **Audit the entry points and use factories in the documentation.** Would
    exercise `plugin-packaging`'s discovery requirements from the outside, which
@@ -305,7 +318,7 @@ proposal, the task list and PLAN.md.
    that `ruff check` is clean but `ruff format --check` is not: it would reflow
    hand-aligned comments in a README example block, so that must be settled as
    part of the change.
-6. **Strengthen the tests to assert what the specs require.** Three gaps, all found
+6. **Strengthen the tests to assert what the specs require.** Four gaps, all found
    while reviewing this baseline, none indicating anything broken - the coverage
    simply does not match the contract:
 
@@ -328,6 +341,26 @@ proposal, the task list and PLAN.md.
      so their only negative frequencies are numerical noise of order 1e-3 meV at
      the zone centre; testing the contract meaningfully would need a fixture with
      genuine soft modes.
+   - *Entry-point registration.* The `plugin-packaging` specs require each class to
+     load from the standard plugin factory under its documented name, and no test
+     does so; every test imports the classes directly. Add one test per registered
+     class asserting `DataFactory`/`WorkflowFactory` returns it for its documented
+     entry-point name, which exercises the registration pipeline end to end -
+     declaration in `pyproject.toml`, installation into the environment, and
+     resolution by AiiDA - rather than any one link in it.
+
+     What existing coverage does and does not reach was established empirically
+     rather than assumed. AiiDA refuses to store a `Data` subclass lacking an entry
+     point (`StoringNotAllowed`), so tests that store a node already prove *some*
+     registration exists; and `node_type` is derived from the entry-point string,
+     so the name is embedded in stored data. But `Process.build_process_type`
+     takes the opposite policy - on a missing entry point it silently falls back to
+     the fully qualified class path - so the two WorkChain entry points could be
+     deleted outright with the suite still green. Nor does storing check the
+     *name*: renaming an entry point would keep every test passing while breaking
+     `DataFactory` for users and changing `node_type` for stored data. Both holes
+     close with the same small test, and a per-class test keeps the check honest
+     as classes are added.
 7. **Defect: the generated density-of-states energy axis clips at zero.** The axis
    is built as `arange(0.0, emax + energy_spacing, energy_spacing)`, so imaginary
    modes - conventionally represented as negative frequencies - fall below it and
@@ -396,3 +429,17 @@ proposal, the task list and PLAN.md.
    executed gallery, both of which must stay runnable on a laptop with no
    infrastructure - a constraint the `testing-and-ci` capability already requires
    and which this work must not erode.
+
+11. **Drop the exact Python 3.12 pin.** `requires-python = "==3.12.*"` is not a
+    language requirement of this package - nothing here uses a 3.12-only feature,
+    and the code would run unchanged on 3.11 or 3.13. It exists solely because the
+    locally supplied aarch64 Euphonic wheel is built for one interpreter version,
+    and an exact pin was the blunt way to stop uv resolving an environment the
+    wheel could not satisfy. The cost is borne by every user on every platform,
+    including the x86-64 majority who install Euphonic from PyPI and never needed
+    the constraint. Replace it with a range reflecting what the package and its
+    dependencies actually support, and confine the wheel's interpreter constraint
+    to the local aarch64 workaround. Doing so makes the CI matrix a real choice
+    rather than a foregone conclusion, and item 3 (aarch64 wheels reaching PyPI)
+    would remove the underlying cause entirely. Found while reviewing this
+    baseline.

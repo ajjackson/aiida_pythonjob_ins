@@ -11,7 +11,9 @@ without imposing avoidable dependency conflicts.
 The package SHALL register its data types under the `aiida.data` entry-point group
 and its workflows under `aiida.workflows`, using the `pythonjob_ins` prefix, so
 that AiiDA users can load them through the standard plugin factories rather than
-by direct import.
+by direct import. The registered set SHALL cover every data type and workflow
+intended for users to load, so introducing one is a modification to this
+requirement and to the scenarios below.
 
 #### Scenario: Data classes load through the data factory
 
@@ -27,11 +29,12 @@ by direct import.
 - **THEN** the corresponding `DispersionWorkChain` or `DosWorkChain` class is
   returned
 
-#### Scenario: Registered plugins are listed without duplicates
+#### Scenario: Every declared entry point resolves to its class
 
 - **WHEN** the installed AiiDA plugins are listed for the `aiida.data` and
   `aiida.workflows` groups
-- **THEN** each of this package's five entry points appears exactly once
+- **THEN** every entry point this package declares is listed, and each loads the
+  class it names
 
 ### Requirement: Entry-point names do not collide with serializer discovery
 
@@ -81,7 +84,8 @@ project's uv-based workflow.
 
 #### Scenario: The Python version requirement is enforced
 
-- **WHEN** installation is attempted on a Python other than 3.12
+- **WHEN** installation is attempted on a Python outside the declared supported
+  version range
 - **THEN** the installation is rejected by the declared requirement
 
 ### Requirement: Euphonic installs from PyPI wherever wheels are published

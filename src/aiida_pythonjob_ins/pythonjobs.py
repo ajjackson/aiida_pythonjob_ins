@@ -16,7 +16,8 @@ production default: the code lives once on the remote and provenance stays small
 dependency; to avoid that entirely, pass ``register_pickle_by_value=True`` via
 ``**kwargs`` below to ship the function *by value* -- then the Code needs only
 cloudpickle + the science libs, at the cost of re-sending/re-storing the code on
-every submission. See PLAN.md §3.5.)
+every submission. See "Remote Execution, Pickling, and register_pickle_by_value"
+in docs/source/design_notes.rst.)
 """
 
 from __future__ import annotations

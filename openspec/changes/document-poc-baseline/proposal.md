@@ -20,9 +20,12 @@ generation items, ruff in CI) real specs to attach their deltas to.
 - Record the architecture and the decisions taken during implementation in
   `design.md`, sourced from `PLAN.md` §3, §6 and its "Implementation notes /
   decisions made" log.
-- Retire the duplicated planning detail in `PLAN.md` in favour of the specs,
-  leaving a pointer so the file stops being a second source of truth.
-- No changes to `src/`, `tests/`, `docs/` content, dependencies or CI behaviour.
+- Retire `PLAN.md` in favour of the specs, folding its goals, out-of-scope list
+  and reference links into `README.md` and deleting the file, so it stops being a
+  second source of truth. It remains in git history.
+- No changes to runtime behaviour, dependencies or CI. The only edits to `src/`,
+  `pyproject.toml` and `README.md` are comments and links repointed away from the
+  deleted file.
 
 ## Capabilities
 
@@ -64,7 +67,7 @@ None - `openspec/specs/` is currently empty, so every capability here is new.
 
 ## Non-goals
 
-- Implementing anything new. Ten follow-up items are deliberately left out and
+- Implementing anything new. Eleven follow-up items are deliberately left out and
   recorded together in `design.md` under "Deferred work"; each should become its
   own change proposed against these baseline specs.
 - Re-litigating decisions already taken. Where the implementation settled a
@@ -82,9 +85,15 @@ None - `openspec/specs/` is currently empty, so every capability here is new.
 - **Added**: `openspec/specs/` gains eight capability specs once this change is
   archived; `openspec/config.yaml` carries the project context and artifact
   rules.
-- **Modified**: `PLAN.md` is reduced to a historical pointer.
-- **Unaffected**: all of `src/`, `tests/`, `docs/`, `pyproject.toml`, `uv.lock`
-  and `.github/workflows/`. No dependency, API or runtime behaviour changes.
+- **Removed**: `PLAN.md`, after its surviving content moved to `README.md`,
+  `design.md` and the specs.
+- **Modified, comments and prose only**: `README.md` gains the goals and
+  references sections and loses its two `PLAN.md` links; `pyproject.toml`,
+  `src/aiida_pythonjob_ins/pythonjobs.py` and
+  `src/aiida_pythonjob_ins/serialization.py` have comments repointed at named
+  sections of `docs/source/design_notes.rst`.
+- **Unaffected**: `tests/`, `docs/` content, `uv.lock` and
+  `.github/workflows/`. No dependency, API or runtime behaviour changes.
 - **Verification**: the baseline is derived from the source and its test
   assertions, and was then checked against a full run of the suite on x86-64
   Linux, where Euphonic resolves from PyPI and no local wheel is needed. All 26

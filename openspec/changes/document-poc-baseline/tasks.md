@@ -32,10 +32,10 @@ the source of the behaviour captured in `specs/`. No further work.
 
 ## 4. Retire the superseded planning document
 
-- [ ] 4.1 Replace the body of `PLAN.md` with a short historical note pointing to `openspec/specs/`, the archived change, and `docs/source/design_notes.rst`
-- [ ] 4.2 Repoint the two `PLAN.md` links in `README.md` (lines 12 and 139) at `openspec/specs/` and the design notes
-- [ ] 4.3 Repoint the `PLAN.md` comments in `pyproject.toml` (line 2), `src/aiida_pythonjob_ins/pythonjobs.py` (§3.5) and `src/aiida_pythonjob_ins/serialization.py` (§3.6-§3.7) at `docs/source/design_notes.rst` or the relevant spec
-- [ ] 4.4 Confirm no remaining source or documentation file cites a `PLAN.md` section number
+- [x] 4.1 Fold the content worth keeping into `README.md`: the original goals and what was out of scope, plus the reference links, including the in-house `stfc/alc-ux#32` notes that were recorded nowhere else
+- [x] 4.2 Delete `PLAN.md` outright rather than leaving a pointer stub, so there is no third document to keep current; the original remains in git history
+- [x] 4.3 Repoint the `README.md` links at `openspec/specs/` and the design notes, and the comments in `pyproject.toml`, `src/aiida_pythonjob_ins/pythonjobs.py` and `src/aiida_pythonjob_ins/serialization.py` at the relevant named section of `docs/source/design_notes.rst`
+- [x] 4.4 Confirm no remaining source or documentation file cites `PLAN.md` or one of its section numbers, and update `openspec/config.yaml`, which described it in the present tense
 
 ## 5. Close out
 

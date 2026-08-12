@@ -26,7 +26,8 @@ from aiida.orm import KpointsData, Node
 from .conversions import spectrum1d_to_xydata
 from .data import ForceConstantsData, QpointPhononModesData
 
-# See PLAN.md §3.6-§3.7 for the full (de)serialization model and conversion map.
+# See "Serializer and Deserializer Architecture" in docs/source/design_notes.rst
+# for the full (de)serialization model and conversion map.
 # Python type (module.ClassName) -> dotted path of a callable returning a Data node.
 EUPHONIC_SERIALIZERS: dict[str, str] = {
     "euphonic.force_constants.ForceConstants": (

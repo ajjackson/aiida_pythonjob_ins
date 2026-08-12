@@ -49,9 +49,11 @@ context: |
   interpolation onto q-points, high-symmetry band paths via seekpath, dispersion
   (band structure) and density of states.
 
-  History: this project was built before OpenSpec was adopted. `PLAN.md` is the
-  pre-OpenSpec planning document and remains the reference for original intent
-  and for design decisions recorded during implementation.
+  History: this project was built before OpenSpec was adopted, guided by a
+  planning document, `PLAN.md`, that has since been retired. Its content was
+  migrated into the specs, into `design.md` of the baseline change, into
+  `docs/source/design_notes.rst` and into `README.md`; the file itself is
+  recoverable from git history if an original wording is ever needed.
 
 rules:
   proposal:
@@ -86,5 +88,6 @@ operations:
         working around the dependency.
   archive:
     guidance:
-      - Once a capability is captured in the main specs, remove the duplicated
-        detail from `PLAN.md` instead of maintaining two sources of truth.
+      - Keep the specs the single source of truth for behaviour. Where an
+        existing document duplicates a captured capability, cut it back to a
+        pointer rather than maintaining two descriptions that can drift.

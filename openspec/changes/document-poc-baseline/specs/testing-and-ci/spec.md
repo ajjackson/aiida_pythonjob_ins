@@ -74,31 +74,43 @@ noise between processes but narrow enough to catch real regressions.
 - **THEN** the two results are compared numerically within a stated tolerance, and
   no reference frequency values appear in the test
 
-### Requirement: The environment provides the tools AiiDA's scheduler needs
+### Requirement: The environment provides the process tools the scheduler needs
 
-AiiDA's direct scheduler polls running jobs using the system process tools, so any
-environment running the suite SHALL provide them. This SHALL be treated as a
-declared environment requirement rather than worked around in code.
+Job tests run through AiiDA's direct scheduler, which tracks running jobs by
+polling the system process table with `ps`, using BSD-style options so that
+processes with no controlling terminal are still listed. Any environment running
+the suite or building the documentation SHALL provide a `ps` supporting that
+usage. This SHALL be a declared environment prerequisite, not worked around in
+code.
 
-#### Scenario: A container image used for development
+#### Scenario: A minimal environment lacks the tool
 
-- **WHEN** a development container image is built for this project
-- **THEN** it installs the system process tools required by the direct scheduler
+- **WHEN** the suite is run where `ps` is absent or does not support these options
+- **THEN** the shortfall is treated as an unmet environment prerequisite, and the
+  code neither detects nor compensates for it
+
+#### Scenario: Prerequisites are discoverable
+
+- **WHEN** a developer prepares an environment in which to run the suite or build
+  the documentation
+- **THEN** the documented prerequisites state this requirement alongside the other
+  system-level ones
 
 ### Requirement: Continuous integration runs the suite on every change
 
 The project SHALL run its test suite automatically on pushes to the main branch
-and on pull requests, on an x86-64 Linux runner using the project's pinned Python
-version and its uv-based install, so that the platform-specific wheel workaround
-is exercised only where it applies.
+and on pull requests, on a supported Python version, installing dependencies from
+the project's declared configuration. Coverage SHALL include the primary target
+platform, x86-64 Linux; extending it to further platforms SHALL NOT require any
+change to this requirement.
 
 #### Scenario: A pull request is opened
 
 - **WHEN** a pull request is opened against the repository
-- **THEN** continuous integration installs the project with uv and runs the test
-  suite, reporting failure if any test fails
+- **THEN** continuous integration installs the project and runs the test suite,
+  reporting failure if any test fails
 
-#### Scenario: The runner resolves Euphonic from PyPI
+#### Scenario: The primary target platform is covered
 
-- **WHEN** continuous integration installs dependencies on its x86-64 runner
-- **THEN** Euphonic is resolved from PyPI, with no local wheel required
+- **WHEN** the continuous integration configuration is inspected
+- **THEN** it runs the suite on x86-64 Linux
