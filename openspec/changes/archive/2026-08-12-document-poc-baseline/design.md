@@ -363,7 +363,7 @@ section numbers below record where each item originated.
      so their only negative frequencies are numerical noise of order 1e-3 meV at
      the zone centre; testing the contract meaningfully would need a fixture with
      genuine soft modes.
-   - *Entry-point registration.* The `plugin-packaging` specs require each class to
+   - *Entry-point registration.* (Addressed by the `test-entry-point-registration` change). The `plugin-packaging` specs require each class to
      load from the standard plugin factory under its documented name, and no test
      does so; every test imports the classes directly. Add one test per registered
      class asserting `DataFactory`/`WorkflowFactory` returns it for its documented

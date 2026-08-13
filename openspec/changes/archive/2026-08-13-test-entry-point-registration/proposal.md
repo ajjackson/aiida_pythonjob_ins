@@ -9,9 +9,10 @@ AiiDA refuses to store a `Data` subclass that has no registered entry point
 (`StoringNotAllowed`), so the existing tests do prove that *some* registration
 exists for the three data types. Two holes remain:
 
-- `Process.build_process_type` takes the opposite policy: with no entry point it
-  silently falls back to the fully qualified class path. Both workflow entry
-  points could be deleted from `pyproject.toml` and the suite would stay green.
+- Current tests pass imported class objects directly to workflows, relying on
+  `Process.build_process_type` falling back to fully qualified import paths when
+  no entry point is found. Both workflow entry points could be deleted from
+  `pyproject.toml` without breaking any test.
 - Neither path checks the *name*. Renaming an entry point would keep every test
   passing while breaking `DataFactory` for users and changing the `node_type`
   recorded in stored data, since `node_type` is derived from the entry-point
