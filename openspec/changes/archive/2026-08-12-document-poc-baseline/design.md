@@ -324,7 +324,7 @@ against these specs. Recorded here so they are not scattered across the proposal
 the task list and the planning document this change deletes. The `PLAN.md`
 section numbers below record where each item originated.
 
-1. **Audit the entry points and use factories in the documentation.** Would
+1. **Audit the entry points and use factories in the documentation.** (Addressed by the `reconcile-documentation-gaps` change). Would
    exercise `plugin-packaging`'s discovery requirements from the outside, which
    nothing currently does. Decided: use factories prominently in the docs, stating
    the equivalent direct import once. (PLAN.md §12.1)
@@ -414,7 +414,7 @@ section numbers below record where each item originated.
    question for that change to ask.
 
 8. **Surface workflow exit codes in the documentation, and correct the claim that
-   they already are.** The `aiida-workchain` directive renders inputs, outputs and
+   they already are.** (Addressed by the `reconcile-documentation-gaps` change). The `aiida-workchain` directive renders inputs, outputs and
    the outline, but not exit codes: `ERROR_SUB_PROCESS_FAILED` appears nowhere in
    the built site except the viewcode source listing. Meanwhile
    `docs/source/workflows.rst` tells the reader these pages "show the real inputs,
@@ -423,7 +423,7 @@ section numbers below record where each item originated.
    documented somewhere. Either way the prose needs fixing. Found by building the
    docs while verifying this baseline.
 
-9. **Either exercise pickle-by-value or stop advertising it.** The docstring in
+9. **Either exercise pickle-by-value or stop advertising it.** (Addressed by the `reconcile-documentation-gaps` change). The docstring in
    `pythonjobs.py` invites callers to pass `register_pickle_by_value=True` to avoid
    installing this package remotely, while `design_notes.rst` says to "always" use
    the by-reference default. Nothing sets the flag and no test covers it, so the

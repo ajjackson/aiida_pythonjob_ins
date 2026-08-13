@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**06:05.204** total execution time for 3 files **from all galleries**:
+**06:12.517** total execution time for 3 files **from all galleries**:
 
 .. container::
 
@@ -33,11 +33,11 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_plot_phonopy_bands_and_dos.py` (``tutorials/plot_phonopy_bands_and_dos.py``)
-     - 02:03.245
+     - 02:05.885
      - 0.0
    * - :ref:`sphx_glr_auto_examples_plot_dispersion.py` (``tutorials/plot_dispersion.py``)
-     - 02:01.452
+     - 02:05.615
      - 0.0
    * - :ref:`sphx_glr_auto_examples_plot_dos.py` (``tutorials/plot_dos.py``)
-     - 02:00.507
+     - 02:01.017
      - 0.0

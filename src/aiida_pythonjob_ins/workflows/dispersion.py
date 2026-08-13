@@ -76,7 +76,11 @@ def assemble_bands(modes: QpointPhononModesData, qpoints: KpointsData) -> BandsD
 
 
 class DispersionWorkChain(ForceConstantsWorkChain):
-    """Compute phonon dispersion from a CASTEP file or a ForceConstantsData node."""
+    """Compute phonon dispersion from a CASTEP file or a ForceConstantsData node.
+
+    Exit Codes:
+        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
+    """
 
     @classmethod
     def define(cls, spec) -> None:

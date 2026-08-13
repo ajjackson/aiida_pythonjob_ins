@@ -32,7 +32,11 @@ from aiida_pythonjob_ins.pythonjobs import prepare_read_force_constants_inputs
 
 
 class ForceConstantsWorkChain(WorkChain):
-    """Resolve ``self.ctx.force_constants`` from a CASTEP file or a given node."""
+    """Resolve ``self.ctx.force_constants`` from a CASTEP file or a given node.
+
+    Exit Codes:
+        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
+    """
 
     @classmethod
     def define(cls, spec) -> None:
