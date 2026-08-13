@@ -336,7 +336,7 @@ section numbers below record where each item originated.
 4. **Add `abinslib` and then `resins` wrappers** as new operations, data types and
    workflows, reusing the PythonJob and Data-type patterns. The largest item, and
    the reason the package is named generically. (PLAN.md §9.7)
-5. **Wire ruff into the main CI workflow**, which currently runs pytest only. Note
+5. **Wire ruff into the main CI workflow** (Addressed by the `setup-ruff-and-relax-python` change), which currently runs pytest only. Note
    that `ruff check` is clean but `ruff format --check` is not: it would reflow
    hand-aligned comments in a README example block, so that must be settled as
    part of the change.
@@ -457,7 +457,7 @@ section numbers below record where each item originated.
    infrastructure - a constraint the `testing-and-ci` capability already requires
    and which this work must not erode.
 
-11. **Drop the exact Python 3.12 pin.** `requires-python = "==3.12.*"` is not a
+11. **Drop the exact Python 3.12 pin.** (Addressed by the `setup-ruff-and-relax-python` change) `requires-python = "==3.12.*"` is not a
     language requirement of this package - nothing here uses a 3.12-only feature,
     and the code would run unchanged on 3.11 or 3.13. It exists solely because the
     locally supplied aarch64 Euphonic wheel is built for one interpreter version,
