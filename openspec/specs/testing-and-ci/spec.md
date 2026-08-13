@@ -5,9 +5,7 @@
 Keep the test suite runnable anywhere without external services or manual setup,
 and guarantee that running it never reads or modifies a developer's real AiiDA
 installation.
-
 ## Requirements
-
 ### Requirement: The test session is hermetic with respect to AiiDA configuration
 
 A test run SHALL use an ephemeral AiiDA configuration directory created for that
@@ -116,3 +114,37 @@ change to this requirement.
 
 - **WHEN** the continuous integration configuration is inspected
 - **THEN** it runs the suite on x86-64 Linux
+
+### Requirement: Plugin registration is verified through the plugin factories
+
+The suite SHALL verify that every class this package registers as an AiiDA plugin
+is returned by the corresponding plugin factory when requested by its documented
+entry-point name. Coverage SHALL be expressed per registered class, so that a
+newly registered class without a corresponding case is a visible omission. The
+verification SHALL exercise registration as installed in the environment under
+test, rather than importing the classes directly.
+
+#### Scenario: Each registered data type loads from the data factory
+
+- **WHEN** a registered data type's documented entry-point name is requested from
+  AiiDA's data factory
+- **THEN** the factory returns that class
+
+#### Scenario: Each registered workflow loads from the workflow factory
+
+- **WHEN** a registered workflow's documented entry-point name is requested from
+  AiiDA's workflow factory
+- **THEN** the factory returns that class
+
+#### Scenario: A registration that is removed or renamed is detected
+
+- **WHEN** an entry-point declaration is removed, or its name changed, while the
+  class itself remains importable
+- **THEN** the suite fails
+
+#### Scenario: Verification needs no stored data
+
+- **WHEN** the registration checks run
+- **THEN** they resolve the plugins without storing a node, submitting a job or
+  requiring any service beyond the test session's own configuration
+
