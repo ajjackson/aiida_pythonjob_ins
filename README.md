@@ -113,16 +113,16 @@ results, node = run_get_node(
     code=code,
 )
 
-results["band_path"]      # KpointsData: q-point path + high-symmetry labels
-results["band_structure"] # BandsData: phonon band structure
-results["phonon_modes"]   # QpointPhononModesData: frequencies + eigenvectors
+results["band_path"]  # KpointsData: q-point path + high-symmetry labels
+results["band_structure"]  # BandsData: phonon band structure
+results["phonon_modes"]  # QpointPhononModesData: frequencies + eigenvectors
 
 # Plot with the native AiiDA/matplotlib tooling (no AiiDALab needed):
 results["band_structure"].show_mpl()
 
 # Or drop back to Euphonic objects when needed:
 modes = results["phonon_modes"].get_modes()  # euphonic.QpointPhononModes
-spectrum = modes.get_dispersion()            # euphonic.Spectrum1D
+spectrum = modes.get_dispersion()  # euphonic.Spectrum1D
 ```
 
 See `tests/` for runnable examples using the official AiiDA pytest fixtures.

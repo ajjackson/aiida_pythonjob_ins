@@ -9,8 +9,8 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest  # x86-64; provides `ps` (procps) for AiiDA's scheduler
+  lint:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -18,6 +18,29 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run linter
+        run: uv run ruff check
+
+      - name: Check code formatting
+        run: uv run ruff format --check
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest  # x86-64; provides `ps` (procps) for AiiDA's scheduler
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: uv sync
