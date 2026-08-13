@@ -1,5 +1,6 @@
 # Packaging + tooling configuration for the aiida-pythonjob-ins proof-of-concept.
-# See PLAN.md for the overall design and rationale.
+# See openspec/specs/ for the behaviour this package guarantees, and
+# docs/source/design_notes.rst for the design rationale.
 # Use uv's native build backend for consistency with the uv-based workflow
 # (https://docs.astral.sh/uv/concepts/build-backend/). setuptools would be the
 # conservative "established standard" alternative.

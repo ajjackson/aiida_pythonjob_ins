@@ -9,7 +9,37 @@ neutron scattering (INS) Python libraries — starting with
 [`aiida-pythonjob`](https://github.com/aiidateam/aiida-pythonjob) execution model
 (running Python functions as AiiDA jobs) rather than command-line wrappers.
 
-See [`PLAN.md`](./PLAN.md) for the design and roadmap.
+The behaviour this package guarantees is specified in [`openspec/specs/`](./openspec/specs/),
+and the reasoning behind the design is recorded in
+[`docs/source/design_notes.rst`](./docs/source/design_notes.rst).
+
+## Goals
+
+The proof of concept set out to:
+
+- Run Euphonic routines through the Python API inside AiiDA, rather than by
+  shelling out to a command line, so the scientific logic stays as ordinary
+  importable Python functions.
+- Use only Euphonic's public API, depending on no private functions or methods.
+- Provide custom AiiDA data types for the central objects passed between steps,
+  force constants and q-point phonon modes.
+- Start from `PythonJob`-wrapped atomic operations and compose them into
+  workflows.
+- Interact with `Computer` and `Code` in the standard AiiDA way, so the same code
+  can run anywhere, even though the tests run on localhost.
+- Test from the outset with `pytest` and the official AiiDA fixtures, run in
+  continuous integration.
+- Comment generously, citing the source documentation and projects, while keeping
+  the code itself concise.
+
+The first scientific target was importing force constants and computing a phonon
+band structure along a q-point path, following the logic of
+`euphonic.cli.dispersion`.
+
+Deliberately out of scope: `abinslib` and `resins` wrappers, remote and HPC
+scheduler execution (the hooks are there, but the tests stay on localhost),
+richer data types beyond the three implemented, complex CI matrices, and
+publishing to PyPI.
 
 ## Development setup
 
@@ -136,5 +166,22 @@ appear there, raise the level inside that process — e.g. via the code's
 
 ## Roadmap
 
-See [`PLAN.md`](./PLAN.md). Next: `abinslib` and `resins` wrappers reusing the
-same PythonJob + custom-Data pattern.
+Next: `abinslib` and `resins` wrappers reusing the same PythonJob and custom-data
+pattern. Work that this proof of concept deliberately left undone is recorded
+under "Deferred work" in the archived baseline change in
+[`openspec/changes/archive/`](./openspec/changes/archive/); each item is intended
+to become its own change proposed against the specs.
+
+## References
+
+- Euphonic — [docs](https://euphonic.readthedocs.io/),
+  [PyPI](https://pypi.org/project/Euphonic/)
+- [`abinslib`](https://pypi.org/project/abinslib/) and
+  [`resins`](https://pypi.org/project/resins) — future wrapper targets
+- [`aiida-pythonjob`](https://github.com/aiidateam/aiida-pythonjob) —
+  [docs](https://aiida-pythonjob.readthedocs.io/)
+- [Writing AiiDA plugins](https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/plugins.html)
+  and [testing them](https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/plugins.html#testing-a-plugin)
+- [AiiDA materials-science data types](https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/data_types.html#materials-science-data-types)
+- Related in-house effort, with testing notes:
+  [stfc/alc-ux#32](https://github.com/stfc/alc-ux/issues/32)
