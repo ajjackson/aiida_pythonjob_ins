@@ -17,7 +17,11 @@ from aiida_pythonjob_ins.workflows.base import ForceConstantsWorkChain
 
 
 class DosWorkChain(ForceConstantsWorkChain):
-    """Compute a phonon DOS from a CASTEP file or a ForceConstantsData node."""
+    """Compute a phonon DOS from a CASTEP file or a ForceConstantsData node.
+
+    Exit Codes:
+        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
+    """
 
     @classmethod
     def define(cls, spec) -> None:

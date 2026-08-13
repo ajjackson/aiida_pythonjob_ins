@@ -43,7 +43,12 @@ print(f"Force constants: {force_constants.get_force_constants().crystal.n_atoms}
 # --------------
 # Feed the Phonopy-derived force constants straight into the dispersion workflow.
 
-from aiida_pythonjob_ins.workflows import DispersionWorkChain, DosWorkChain
+from aiida.plugins import WorkflowFactory
+
+# Load via WorkflowFactory (direct imports like
+# `from aiida_pythonjob_ins.workflows import ...` also work)
+DispersionWorkChain = WorkflowFactory("pythonjob_ins.dispersion")
+DosWorkChain = WorkflowFactory("pythonjob_ins.dos")
 
 bands_results, bands_node = run_get_node(
     DispersionWorkChain,

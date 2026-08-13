@@ -10,14 +10,11 @@ Code-environment note: aiida-pythonjob cloudpickles these module-level functions
 *by reference* -- a tiny module+name string per job -- so the remote unpickles via
 ``from aiida_pythonjob_ins.operations import ...``. That module's import chain is
 deliberately AiiDA-free, so loading the function on the remote does not import or
-initialise aiida (no profile/config needed there). This is the preferred
-production default: the code lives once on the remote and provenance stays small.
-(The package is still *installed* on the remote, which pulls aiida-core as a
-dependency; to avoid that entirely, pass ``register_pickle_by_value=True`` via
-``**kwargs`` below to ship the function *by value* -- then the Code needs only
-cloudpickle + the science libs, at the cost of re-sending/re-storing the code on
-every submission. See "Remote Execution, Pickling, and register_pickle_by_value"
-in docs/source/design_notes.rst.)
+initialise aiida (no profile/config needed there). By-reference pickling is the
+required execution strategy: scientific dependencies like Euphonic, NumPy, and
+seekpath contain compiled C-extensions that cannot be pickled by value. See
+"Remote Execution, Pickling, and register_pickle_by_value" in
+docs/source/design_notes.rst.
 """
 
 from __future__ import annotations

@@ -23,7 +23,11 @@ code = get_python_code()
 # The workflow reads the force constants (a PythonJob), then samples a
 # Monkhorst-Pack grid and computes the DOS with adaptive broadening.
 
-from aiida_pythonjob_ins.workflows import DosWorkChain
+from aiida.plugins import WorkflowFactory
+
+# Load via WorkflowFactory (direct imports like
+# `from aiida_pythonjob_ins.workflows import DosWorkChain` also work)
+DosWorkChain = WorkflowFactory("pythonjob_ins.dos")
 
 results, node = run_get_node(
     DosWorkChain,

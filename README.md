@@ -99,9 +99,13 @@ block from `pyproject.toml`.
 import matplotlib
 from aiida import load_profile, orm
 from aiida.engine import run_get_node
-from aiida_pythonjob_ins.workflows import DispersionWorkChain
+from aiida.plugins import WorkflowFactory
 
 load_profile()
+
+# Load plugins via standard AiiDA factories (direct imports like
+# `from aiida_pythonjob_ins.workflows import DispersionWorkChain` also work)
+DispersionWorkChain = WorkflowFactory("pythonjob_ins.dispersion")
 
 # A Python `Code` on some computer (here: interpreter with euphonic installed).
 code = orm.load_code("python3@localhost")

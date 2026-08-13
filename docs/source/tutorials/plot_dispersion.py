@@ -24,7 +24,11 @@ code = get_python_code()
 # The workflow reads the force constants (a PythonJob), builds a seekpath q-point
 # path, interpolates the phonon modes, and composes a band structure.
 
-from aiida_pythonjob_ins.workflows import DispersionWorkChain
+from aiida.plugins import WorkflowFactory
+
+# Load via WorkflowFactory (direct imports like
+# `from aiida_pythonjob_ins.workflows import DispersionWorkChain` also work)
+DispersionWorkChain = WorkflowFactory("pythonjob_ins.dispersion")
 
 results, node = run_get_node(
     DispersionWorkChain,
