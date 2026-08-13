@@ -5,9 +5,7 @@
 Make the plugin installable and discoverable as a well-behaved member of the
 AiiDA plugin ecosystem, co-existing with other plugins in a shared environment
 without imposing avoidable dependency conflicts.
-
 ## Requirements
-
 ### Requirement: Plugin classes are discoverable through AiiDA entry points
 
 The package SHALL register its data types under the `aiida.data` entry-point group
@@ -76,7 +74,7 @@ avoidable conflicts.
 
 The distribution SHALL be named `aiida-pythonjob-ins` and provide the import
 package `aiida_pythonjob_ins` from a src layout, SHALL declare its supported
-Python version, and SHALL be built by a PEP 517 backend consistent with the
+Python version range as Python 3.11 or greater (`>=3.11`), and SHALL be built by a PEP 517 backend consistent with the
 project's uv-based workflow.
 
 #### Scenario: Installing provides the import package
@@ -114,3 +112,4 @@ change once upstream wheels become available.
 - **WHEN** a developer sets up the project on a platform with no published wheel
 - **THEN** the README tells them to obtain and place the wheel themselves, since it
   is deliberately not committed to the repository
+
