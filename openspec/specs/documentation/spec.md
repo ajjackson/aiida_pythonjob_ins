@@ -6,9 +6,7 @@ Provide documentation that works as an exemplar for the `aiida-pythonjob`
 execution model: an accurate API reference, workflow interfaces taken from the
 live process specifications, and worked examples that are executed and verified
 whenever the documentation is built.
-
 ## Requirements
-
 ### Requirement: API reference is generated from the source
 
 The documentation SHALL include an API reference generated automatically from the
@@ -25,12 +23,14 @@ package source, so it cannot drift from the code as modules are added or changed
 A WorkChain's interface is defined at runtime and is invisible to static analysis,
 which would otherwise expose only its internal step methods. The documentation
 SHALL therefore render workflow interfaces from the live process specification,
-and SHALL keep the misleading static view out of the API reference.
+and SHALL keep the misleading static view out of the API reference. The workflow
+documentation SHALL explicitly document the WorkChain exit codes defined by the
+package (including exit code 400 `ERROR_SUB_PROCESS_FAILED`).
 
 #### Scenario: A workflow page shows its real interface
 
 - **WHEN** the documentation is built
-- **THEN** each workflow's page lists its actual inputs, outputs and outline
+- **THEN** each workflow's page lists its actual inputs, outputs, exit codes and outline
 
 #### Scenario: Outline methods are not presented as the public interface
 
@@ -43,7 +43,10 @@ and SHALL keep the misleading static view out of the API reference.
 The documentation SHALL include runnable examples that execute real workflows
 during the build, so a broken example fails the build rather than silently
 misleading readers. Each example SHALL present both its scientific result and the
-provenance graph that produced it, and SHALL be downloadable as a notebook.
+provenance graph that produced it, and SHALL be downloadable as a notebook. Worked
+examples and project README examples SHALL demonstrate loading custom data nodes
+and workflows through AiiDA's standard plugin factories (`DataFactory` and `WorkflowFactory`)
+as the primary pattern, noting that direct class imports are also supported.
 
 #### Scenario: Examples cover the supported inputs and both workflows
 
@@ -62,6 +65,11 @@ provenance graph that produced it, and SHALL be downloadable as a notebook.
 - **WHEN** an example needs input data
 - **THEN** it locates the sample files bundled in the repository at runtime, rather
   than downloading them or requiring the reader to supply them
+
+#### Scenario: Examples use plugin factories for loading classes
+
+- **WHEN** an example or README snippet loads a registered data type or workflow
+- **THEN** it demonstrates loading via `DataFactory` or `WorkflowFactory`, with a brief note that direct class imports are also supported
 
 ### Requirement: Building the documentation does not touch a real AiiDA installation
 
@@ -121,3 +129,4 @@ the code before relying on it.
 
 - **WHEN** the README is viewed
 - **THEN** it carries the same disclosure
+
