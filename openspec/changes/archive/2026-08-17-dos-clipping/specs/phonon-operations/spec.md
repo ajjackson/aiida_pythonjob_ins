@@ -41,7 +41,7 @@ gradients SHALL be available and SHALL be the default.
 - **AND** the spectrum integrates to three modes per atom of the crystal within
   the tolerance broadening allows
 
-#### Scenario: The energy axis is generated from the computed frequencies with asymmetric padding
+#### Scenario: The energy axis is generated from the computed frequencies
 
 - **WHEN** a DOS is computed and the energy range is generated automatically
 - **THEN** the axis uses the requested bin width, applies 5% padding above the maximum computed frequency, and:
