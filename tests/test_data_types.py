@@ -20,7 +20,7 @@ from aiida_pythonjob_ins.data import (
 
 def test_force_constants_roundtrip(aiida_profile, quartz_castep_bin):
     """A stored+reloaded ForceConstantsData yields equivalent force constants."""
-    original = ForceConstants.from_castep(str(quartz_castep_bin))
+    original = ForceConstants.from_castep(quartz_castep_bin)
 
     node = ForceConstantsData(original)
     node.store()  # persist to the temporary profile
@@ -47,7 +47,7 @@ def test_force_constants_type_validation(aiida_profile):
 
 def test_crystal_roundtrip_and_structure_bridge(aiida_profile, quartz_castep_bin):
     """EuphonicCrystalData round-trips and bridges to/from StructureData."""
-    crystal = ForceConstants.from_castep(str(quartz_castep_bin)).crystal
+    crystal = ForceConstants.from_castep(quartz_castep_bin).crystal
 
     node = EuphonicCrystalData(crystal)
     node.store()
@@ -82,7 +82,7 @@ def test_force_constants_from_phonopy(aiida_profile, phonopy_dir):
 
 def test_qpoint_phonon_modes_roundtrip(aiida_profile, quartz_castep_bin):
     """A stored+reloaded QpointPhononModesData reproduces frequencies."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     qpts = np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]])
     modes = force_constants.calculate_qpoint_phonon_modes(qpts)
 

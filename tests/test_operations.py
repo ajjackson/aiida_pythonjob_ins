@@ -35,7 +35,7 @@ def test_operations_emit_logs(quartz_castep_bin, caplog):
     exercises both of their log messages.
     """
     with caplog.at_level(logging.INFO, logger=OPS_LOGGER):
-        force_constants = read_force_constants_from_castep(str(quartz_castep_bin))
+        force_constants = read_force_constants_from_castep(quartz_castep_bin)
         calculate_dispersion(force_constants, q_spacing=0.3)
 
     messages = [rec.getMessage() for rec in caplog.records if rec.name == OPS_LOGGER]
@@ -46,7 +46,7 @@ def test_operations_emit_logs(quartz_castep_bin, caplog):
 
 def test_calculate_dispersion_pure_function(quartz_castep_bin):
     """The plain function returns modes on a non-trivial band path."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     modes = calculate_dispersion(force_constants, q_spacing=0.1)
 
     n_branches = force_constants.crystal.n_atoms * 3
@@ -61,7 +61,7 @@ def test_dispersion_pythonjob_matches_direct_call(python_code, quartz_castep_bin
     we compare the AiiDA-wrapped result against calling Euphonic directly.
     """
     q_spacing = 0.1
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     expected = calculate_dispersion(force_constants, q_spacing=q_spacing)
 
     fc_node = ForceConstantsData(force_constants)
@@ -85,7 +85,7 @@ def test_dispersion_pythonjob_matches_direct_call(python_code, quartz_castep_bin
 
 def test_calculate_dos_pure_function(quartz_castep_bin):
     """The plain DOS function returns a Spectrum1D with matching x/y lengths."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     dos = calculate_dos(force_constants, q_spacing=0.5, energy_spacing=2.0)
 
     assert isinstance(dos, Spectrum1D)
@@ -133,7 +133,7 @@ def test_default_energy_bins_cross_unit():
 
 def test_calculate_dos_preserves_negative_frequencies(quartz_castep_bin):
     """DOS on a dataset with negative frequencies spans below zero."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     dos = calculate_dos(force_constants, q_spacing=0.5, energy_spacing=1.0)
 
     # Quartz CASTEP force constants have small negative acoustic modes at zone centre,
@@ -143,23 +143,35 @@ def test_calculate_dos_preserves_negative_frequencies(quartz_castep_bin):
 
 def test_calculate_dos_sum_rule(quartz_castep_bin):
     """Integrating DOS across the padded axis recovers 3 modes per formula unit."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     energy_spacing = 0.5
-    dos = calculate_dos(
+
+    # 1. Fixed binning (adaptive=False): all modes binned, integral is exact
+    dos_fixed = calculate_dos(
         force_constants,
         q_spacing=0.2,
         energy_spacing=energy_spacing,
         adaptive=False,
     )
-    # Integral of DOS spectrum over energy: sum(dos * dx) ~ 3.0
-    dx = energy_spacing
-    integral = np.sum(dos.y_data.to("1/meV").magnitude * dx)
-    np.testing.assert_allclose(integral, 3.0, rtol=0.01)
+    integral_fixed = np.sum(dos_fixed.y_data.to("1/meV").magnitude * energy_spacing)
+    np.testing.assert_allclose(integral_fixed, 3.0, rtol=1e-10)
+
+    # 2. Adaptive broadening (adaptive=True): continuous Gaussian wings near edges
+    dos_adaptive = calculate_dos(
+        force_constants,
+        q_spacing=0.2,
+        energy_spacing=energy_spacing,
+        adaptive=True,
+    )
+    integral_adaptive = np.sum(
+        dos_adaptive.y_data.to("1/meV").magnitude * energy_spacing
+    )
+    np.testing.assert_allclose(integral_adaptive, 3.0, rtol=0.01)
 
 
 def test_dos_pythonjob_returns_xydata(python_code, quartz_castep_bin):
     """Running the DOS op via PythonJob yields a native XyData."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     fc_node = ForceConstantsData(force_constants)
     inputs = prepare_dos_inputs(
         fc_node, q_spacing=0.5, energy_spacing=2.0, code=python_code

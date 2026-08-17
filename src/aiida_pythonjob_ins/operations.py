@@ -23,6 +23,7 @@ functions stay AiiDA-free and unit-testable.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
@@ -62,7 +63,7 @@ class QpointPath(NamedTuple):
     cell: np.ndarray
 
 
-def read_force_constants_from_castep(filename: str) -> ForceConstants:
+def read_force_constants_from_castep(filename: str | Path) -> ForceConstants:
     """Read a CASTEP ``.castep_bin``/``.check`` file into ``ForceConstants``.
 
     A thin wrapper over ``ForceConstants.from_castep``. It exists because a
