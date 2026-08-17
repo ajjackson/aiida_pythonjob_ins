@@ -99,10 +99,11 @@ def test_default_energy_bins_stable():
     freqs = np.array([0.0, 5.0, 20.0]) * ureg.meV
     bins = default_energy_bins(freqs, 1.0 * ureg.meV)
 
-    # Lower bound clamped cleanly at 0.0 (no bottom padding for stable materials)
+    # Span = 20.0 meV, pad = 1.0 meV. Upper = 21.0 meV, lower = 0.0 meV.
+    assert bins.units == ureg.meV
     assert bins[0] == 0.0 * ureg.meV
-    # Upper bound padded by 5% of span (20 * 0.05 = 1.0 meV -> max at least 21.0 meV)
-    assert bins[-1] >= 21.0 * ureg.meV
+    assert bins[-1] == 21.0 * ureg.meV
+    np.testing.assert_allclose(bins.magnitude, np.arange(0.0, 22.0, 1.0))
 
 
 def test_default_energy_bins_negative_modes():
@@ -110,9 +111,11 @@ def test_default_energy_bins_negative_modes():
     freqs = np.array([-10.0, 5.0, 30.0]) * ureg.meV
     bins = default_energy_bins(freqs, 1.0 * ureg.meV)
 
-    # Span is 40 meV, pad is 2.0 meV. Lower bound padded below -10.0 -> <= -12.0
-    assert bins[0] <= -12.0 * ureg.meV
-    assert bins[-1] >= 32.0 * ureg.meV
+    # Span = 40.0 meV, pad = 2.0 meV. Upper = 32.0 meV, lower = -12.0 meV.
+    assert bins.units == ureg.meV
+    assert bins[0] == -12.0 * ureg.meV
+    assert bins[-1] == 32.0 * ureg.meV
+    np.testing.assert_allclose(bins.magnitude, np.arange(-12.0, 33.0, 1.0))
 
 
 def test_default_energy_bins_cross_unit():
@@ -120,9 +123,12 @@ def test_default_energy_bins_cross_unit():
     freqs = np.array([0.0, 2.0, 5.0]) * ureg.THz
     bins = default_energy_bins(freqs, 1.0 * ureg.meV)
 
+    # 5.0 THz = 20.678... meV. Span = 20.678... meV, pad = 1.0339... meV.
+    # Upper = 21.712... meV -> ceil is 22.0 meV. Lower = 0.0 meV.
     assert bins.units == ureg.meV
     assert bins[0] == 0.0 * ureg.meV
-    assert bins[-1] >= (5.0 * ureg.THz).to(ureg.meV, "spectroscopy")
+    assert bins[-1] == 22.0 * ureg.meV
+    np.testing.assert_allclose(bins.magnitude, np.arange(0.0, 23.0, 1.0))
 
 
 def test_calculate_dos_preserves_negative_frequencies(quartz_castep_bin):
