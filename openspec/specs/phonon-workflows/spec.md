@@ -5,9 +5,7 @@
 Compose the individual phonon steps into end-to-end AiiDA workflows that turn
 force constants into a band structure or a density of states, recording the whole
 calculation as a single connected provenance graph.
-
 ## Requirements
-
 ### Requirement: Workflows accept exactly one source of force constants
 
 Every phonon workflow SHALL obtain its force constants from either a CASTEP file,
@@ -80,7 +78,8 @@ constants and output the resulting density of states as a native `XyData`.
 - **WHEN** the DOS workflow completes successfully
 - **THEN** it outputs an `XyData` holding a physically valid density of states:
   non-empty, with energy and value arrays of equal length, values non-negative and
-  not uniformly zero, and integrating to three modes per atom of the crystal within
+  not uniformly zero, whose energy axis covers all computed modes (including any negative/imaginary frequencies),
+  and integrating to three modes per atom of the crystal within
   the tolerance broadening allows
 
 #### Scenario: Grid and energy spacing are configurable
@@ -130,3 +129,4 @@ dedicated failure exit code rather than proceeding with missing results.
 - **THEN** the workflow terminates with exit code 400, reporting that a job step
   did not finish successfully
 - **AND** no downstream outputs are emitted
+

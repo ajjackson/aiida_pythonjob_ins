@@ -25,7 +25,7 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
     Checks the native-type outputs (KpointsData path, BandsData) and that the
     three PythonJob steps were orchestrated as one provenance graph.
     """
-    castep_file = SinglefileData(str(quartz_castep_bin))
+    castep_file = SinglefileData(quartz_castep_bin)
 
     results, node = run_get_node(
         DispersionWorkChain,
@@ -64,7 +64,7 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
 
 def test_dos_workchain(python_code, quartz_castep_bin):
     """Read force constants -> phonon DOS as XyData."""
-    castep_file = SinglefileData(str(quartz_castep_bin))
+    castep_file = SinglefileData(quartz_castep_bin)
 
     results, node = run_get_node(
         DosWorkChain,
@@ -127,8 +127,8 @@ def test_dos_from_phonopy(python_code, phonopy_dir):
 
 def test_workchain_requires_exactly_one_source(python_code, quartz_castep_bin):
     """Providing both castep_file and force_constants is rejected."""
-    castep_file = SinglefileData(str(quartz_castep_bin))
-    fc_node = ForceConstantsData(ForceConstants.from_castep(str(quartz_castep_bin)))
+    castep_file = SinglefileData(quartz_castep_bin)
+    fc_node = ForceConstantsData(ForceConstants.from_castep(quartz_castep_bin))
     with pytest.raises(ValueError, match="exactly one"):
         run_get_node(
             DispersionWorkChain,

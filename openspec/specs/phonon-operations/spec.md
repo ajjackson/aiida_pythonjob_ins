@@ -6,9 +6,7 @@ Provide the scientific lattice-dynamics calculations as plain Python functions
 that are independent of AiiDA, so they can be unit-tested directly, reused
 outside AiiDA, and executed in a remote environment that carries only scientific
 dependencies.
-
 ## Requirements
-
 ### Requirement: Operations are independent of AiiDA
 
 The scientific operations SHALL be importable and runnable without AiiDA being
@@ -131,12 +129,6 @@ the acoustic branches. Both cases are scientifically meaningful and must reach t
 user. Operations SHALL propagate imaginary frequencies unaltered: they SHALL NOT
 be clipped to zero, discarded, or replaced by their magnitude.
 
-One current behaviour falls short of this: an automatically generated
-density-of-states energy axis starts at zero, so imaginary modes fall outside it
-and contribute no weight, as the density-of-states requirement below records.
-That is a known defect rather than an intended exemption, and correcting it is
-deferred work against this capability.
-
 #### Scenario: Imaginary modes reach the caller unchanged
 
 - **WHEN** interpolation yields one or more imaginary frequencies, represented as
@@ -164,19 +156,18 @@ gradients SHALL be available and SHALL be the default.
   and energy bin width
 - **THEN** a non-empty `Spectrum1D` is returned whose bin centres and values have
   equal length, whose values are non-negative and not uniformly zero, and whose
-  energy axis uses the requested bin width and covers the phonon frequency range
-- **AND** the spectrum integrates to three modes per atom of the crystal, less any
-  weight falling outside the binned energy range
+  energy axis uses the requested bin width and covers the full phonon frequency range
+  including imaginary/negative frequencies
+- **AND** the spectrum integrates to three modes per atom of the crystal within
+  the tolerance broadening allows
 
 #### Scenario: The energy axis is generated from the computed frequencies
 
-- **WHEN** a DOS is computed, the energy range being generated automatically since
-  no explicit range can currently be supplied
-- **THEN** the axis uses the requested bin width, starts at zero, and extends past
-  the highest computed frequency
-- **AND** any mode outside that range contributes no weight, so the sum falls short
-  by exactly its share; imaginary modes, lying below zero, are therefore absent
-  from the spectrum
+- **WHEN** a DOS is computed and the energy range is generated automatically
+- **THEN** the axis uses the requested bin width, applies 5% padding above the maximum computed frequency, and:
+  - if the minimum computed frequency is negative (imaginary modes present), applies 5% padding below that minimum frequency;
+  - if the minimum computed frequency is non-negative, clamps the lower bound cleanly at zero without bottom padding
+- **AND** all computed modes fall within the binned energy range, contributing their full weight to the integrated spectrum
 
 #### Scenario: Adaptive broadening can be disabled
 
@@ -203,3 +194,4 @@ or AiiDA decides how messages surface.
 
 - **WHEN** an operation runs without any logging configuration
 - **THEN** nothing is written to standard output by the operation itself
+

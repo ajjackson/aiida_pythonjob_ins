@@ -23,14 +23,18 @@ functions stay AiiDA-free and unit-testable.
 from __future__ import annotations
 
 import logging
-from typing import NamedTuple
+from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 import seekpath
 
+if TYPE_CHECKING:
+    import pint
+
 # Imported at module level (not under TYPE_CHECKING) because aiida-pythonjob
 # resolves the function's type hints at runtime via ``typing.get_type_hints``.
-from euphonic import ForceConstants, QpointPhononModes, Spectrum1D, ureg
+from euphonic import ForceConstants, QpointPhononModes, Quantity, Spectrum1D, ureg
 from euphonic.util import mode_gradients_to_widths, mp_grid
 
 # Library code only *emits* logs; it never configures handlers or levels -- the
@@ -59,7 +63,7 @@ class QpointPath(NamedTuple):
     cell: np.ndarray
 
 
-def read_force_constants_from_castep(filename: str) -> ForceConstants:
+def read_force_constants_from_castep(filename: str | Path) -> ForceConstants:
     """Read a CASTEP ``.castep_bin``/``.check`` file into ``ForceConstants``.
 
     A thin wrapper over ``ForceConstants.from_castep``. It exists because a
@@ -186,6 +190,45 @@ def calculate_dispersion(
     return interpolate_phonon_modes(force_constants, path.qpoints, asr=asr)
 
 
+def default_energy_bins(
+    frequencies: pint.Quantity,
+    energy_spacing: pint.Quantity,
+    *,
+    padding_fraction: float = 0.05,
+) -> pint.Quantity:
+    """Compute default bin edges with asymmetric padding and fixed physical spacing.
+
+    Parameters
+    ----------
+    frequencies
+        Phonon frequencies as a dimensional Quantity.
+    energy_spacing
+        Width of each energy bin as a dimensional Quantity (e.g. ``1.0 * ureg('meV')``).
+    padding_fraction
+        Fractional padding based on the occupied frequency span (default: 0.05).
+        Always added above the maximum frequency; added below the minimum frequency
+        only if negative (imaginary modes present).
+
+    Returns
+    -------
+    pint.Quantity
+        Bin edges with uniform spacing in the units of ``energy_spacing``.
+    """
+    freqs = frequencies.to(energy_spacing.units, "spectroscopy")
+    emin, emax = freqs.min(), freqs.max()
+
+    span = max(emax - emin, energy_spacing)
+    pad = padding_fraction * span
+
+    upper = emax + pad
+    lower = (emin - pad) if emin < 0 else 0
+
+    start_idx = np.floor((lower / energy_spacing).magnitude)
+    stop_idx = np.ceil((upper / energy_spacing).magnitude) + 1.0
+
+    return np.arange(start_idx, stop_idx) * energy_spacing
+
+
 def calculate_dos(
     force_constants: ForceConstants,
     q_spacing: float = 0.1,
@@ -240,6 +283,7 @@ def calculate_dos(
     else:
         modes, mode_widths = result, None
 
-    emax = modes.frequencies.max().to(energy_unit).magnitude
-    dos_bins = np.arange(0.0, emax + energy_spacing, energy_spacing) * ureg(energy_unit)
+    dos_bins = default_energy_bins(
+        modes.frequencies, Quantity(energy_spacing, energy_unit)
+    )
     return modes.calculate_dos(dos_bins, mode_widths=mode_widths)

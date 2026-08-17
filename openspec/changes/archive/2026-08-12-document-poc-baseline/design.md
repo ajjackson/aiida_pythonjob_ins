@@ -383,7 +383,7 @@ section numbers below record where each item originated.
      `DataFactory` for users and changing `node_type` for stored data. Both holes
      close with the same small test, and a per-class test keeps the check honest
      as classes are added.
-7. **Defect: the generated density-of-states energy axis clips at zero.** The axis
+7. **Defect: the generated density-of-states energy axis clips at zero.** (Addressed by the `dos-clipping` change). The axis
    is built as `arange(0.0, emax + energy_spacing, energy_spacing)`, so imaginary
    modes - conventionally represented as negative frequencies - fall below it and
    contribute no weight, with nothing to indicate their absence. There is currently

@@ -40,7 +40,7 @@ def test_kpoints_roundtrip(aiida_profile):
 
 def test_modes_data_to_native_types(aiida_profile, quartz_castep_bin):
     """QpointPhononModesData exposes KpointsData and BandsData views."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     qpts = np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]])
     modes = force_constants.calculate_qpoint_phonon_modes(qpts)
     node = QpointPhononModesData(modes)
@@ -67,7 +67,7 @@ def test_to_structure(aiida_profile, quartz_castep_bin):
 
 def test_extract_structure_is_generic(aiida_profile, quartz_castep_bin):
     """extract_structure works on any node with to_structure() (here: modes)."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     modes = force_constants.calculate_qpoint_phonon_modes(np.array([[0.0, 0.0, 0.0]]))
     modes_node = QpointPhononModesData(modes).store()
 
@@ -80,7 +80,7 @@ def test_modes_to_bands_without_kpoints_uses_euphonic_labels(
     aiida_profile, quartz_castep_bin
 ):
     """Without a KpointsData, labels fall back to Euphonic's automatic ticks."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     modes = calculate_dispersion(force_constants, q_spacing=0.3)
     bands = QpointPhononModesData(modes).to_bands()  # no kpoints
     assert bands.labels  # euphonic derived at least Gamma
@@ -88,7 +88,7 @@ def test_modes_to_bands_without_kpoints_uses_euphonic_labels(
 
 def test_modes_to_bands_validates_mismatched_kpoints(aiida_profile, quartz_castep_bin):
     """A KpointsData whose q-points disagree with the modes is rejected."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     modes = force_constants.calculate_qpoint_phonon_modes(
         np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]])
     )
@@ -103,7 +103,7 @@ def test_modes_to_bands_validates_mismatched_kpoints(aiida_profile, quartz_caste
 
 def test_spectrum1d_to_xydata(aiida_profile, quartz_castep_bin):
     """A Euphonic DOS Spectrum1D maps to an XyData with matching x/y lengths."""
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     dos = calculate_dos(force_constants, q_spacing=0.5, energy_spacing=2.0)
 
     xy = spectrum1d_to_xydata(dos)
@@ -118,7 +118,7 @@ def test_bandsdata_matplotlib_export(aiida_profile, quartz_castep_bin, tmp_path)
     """BandsData renders a band-structure image via matplotlib (no AiiDALab)."""
     mpl.use("Agg")  # headless
 
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     modes = calculate_dispersion(force_constants, q_spacing=0.3)
     bands = QpointPhononModesData(modes).to_bands()
     bands.store()
@@ -135,7 +135,7 @@ def test_interpolation_from_kpoints_matches_direct(python_code, quartz_castep_bi
     Demonstrates KpointsData as the q-point specification input for the
     ForceConstants -> QpointPhononModes step.
     """
-    force_constants = ForceConstants.from_castep(str(quartz_castep_bin))
+    force_constants = ForceConstants.from_castep(quartz_castep_bin)
     fc_node = ForceConstantsData(force_constants).store()
 
     # Build the path as a KpointsData via the parent-side calcfunctions
