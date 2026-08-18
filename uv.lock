@@ -7,6 +7,19 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "abinslib"
+version = "0.1.0.post1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "euphonic" },
+    { name = "resins" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/bc/b314ee7b44c20c439919b2ab58ed634a7cad1340cc49273b1d758073d01b/abinslib-0.1.0.post1.tar.gz", hash = "sha256:85821d89ffdf9baa11ab6b7c0ae66b9bb5a93cfaf65485dd2a3ded5afe2874fe", size = 29599, upload-time = "2026-07-20T10:41:42.016Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/3d/1759d6ccb59121b2d1cb5573ece9b832038899b8b19244c0267d9a372407/abinslib-0.1.0.post1-py3-none-any.whl", hash = "sha256:53405d65528958190e5e28bc0967701d4f4863a9e55783bd62f903c9e8fa6589", size = 26183, upload-time = "2026-07-20T10:41:40.932Z" },
+]
+
+[[package]]
 name = "accessible-pygments"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -80,9 +93,11 @@ name = "aiida-pythonjob-ins"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "abinslib" },
     { name = "aiida-core" },
     { name = "aiida-pythonjob" },
     { name = "euphonic", extra = ["phonopy-reader"] },
+    { name = "resins" },
     { name = "seekpath" },
 ]
 
@@ -104,9 +119,11 @@ doc = [
 
 [package.metadata]
 requires-dist = [
+    { name = "abinslib", specifier = "==0.1.*" },
     { name = "aiida-core", specifier = ">=2.6,<3" },
     { name = "aiida-pythonjob", specifier = "~=0.5.2" },
     { name = "euphonic", extras = ["phonopy-reader"], specifier = "~=2.0" },
+    { name = "resins", specifier = "~=0.1.0" },
     { name = "seekpath", specifier = ">=2.2.1,<3" },
 ]
 
@@ -2698,6 +2715,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
+]
+
+[[package]]
+name = "resins"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pyyaml" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/94/aa/e57875fb559b57302b5df7aa764cb8388ed183e3644088c780944705e7c8/resins-0.1.0.tar.gz", hash = "sha256:596876a68b8be7a734f654b35c3c1fd1445aef73c09894d07137f87bc3367c37", size = 59968, upload-time = "2026-01-21T18:14:37.898Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/8c/c51ef72d60c4b50c79cbf29e43ce9c3c427059dae078c65fbbed4a8d3daa/resins-0.1.0-py3-none-any.whl", hash = "sha256:cb139ba74afef15a01b0d54b7084ff52bdeb21494b1c2493717933e615478a0c", size = 75859, upload-time = "2026-01-21T18:14:35.946Z" },
 ]
 
 [[package]]

@@ -3,8 +3,10 @@
 ## Purpose
 
 Compose the individual phonon steps into end-to-end AiiDA workflows that turn
-force constants into a band structure or a density of states, recording the whole
-calculation as a single connected provenance graph.
+force constants -- or previously computed phonon modes -- into vibrational
+properties such as a band structure, a density of states or an inelastic-neutron-
+scattering spectrum, recording the whole calculation as a single connected
+provenance graph.
 ## Requirements
 ### Requirement: Workflows accept exactly one source of force constants
 

@@ -22,23 +22,45 @@ from typing import Any
 
 import numpy as np
 from aiida.orm import KpointsData, Node
+from euphonic import ForceConstants, QpointPhononModes, Spectrum1D, Spectrum1DCollection
 
-from .conversions import spectrum1d_to_xydata
+from .conversions import spectrum1d_to_xydata, spectrum_collection_to_xydata
 from .data import ForceConstantsData, QpointPhononModesData
+
+
+def _serializer_key(cls: type) -> str:
+    """Registry key exactly as ``aiida-pythonjob`` computes it for a runtime object.
+
+    ``aiida-pythonjob`` looks up a returned object's serializer by
+    ``f"{type(obj).__module__}.{type(obj).__name__}"``. Deriving the key from the
+    imported class itself, rather than writing the string by hand, means the key
+    follows the class if it is relocated upstream (as ``Spectrum1DCollection`` is
+    relative to ``Spectrum1D`` -- see Decision 10 in
+    openspec/changes/abinslib-workflow/design.md). A stale hand-written key would
+    not raise: the lookup would simply miss and silently fall through to a
+    generic ``JsonableData``/``PickledData`` fallback.
+    """
+    return f"{cls.__module__}.{cls.__name__}"
+
 
 # See "Serializer and Deserializer Architecture" in docs/source/design_notes.rst
 # for the full (de)serialization model and conversion map.
 # Python type (module.ClassName) -> dotted path of a callable returning a Data node.
 EUPHONIC_SERIALIZERS: dict[str, str] = {
-    "euphonic.force_constants.ForceConstants": (
+    _serializer_key(ForceConstants): (
         "aiida_pythonjob_ins.data.force_constants.ForceConstantsData"
     ),
-    "euphonic.qpoint_phonon_modes.QpointPhononModes": (
+    _serializer_key(QpointPhononModes): (
         "aiida_pythonjob_ins.data.qpoint_phonon_modes.QpointPhononModesData"
     ),
     # A DOS (or other Spectrum1D) becomes a native XyData.
-    "euphonic.spectra.base.Spectrum1D": (
+    _serializer_key(Spectrum1D): (
         "aiida_pythonjob_ins.serialization.spectrum1d_to_xydata_node"
+    ),
+    # A TOSCA spectrum (or any Spectrum1DCollection) becomes one native XyData
+    # with one y array per line (see conversions.spectrum_collection_to_xydata).
+    _serializer_key(Spectrum1DCollection): (
+        "aiida_pythonjob_ins.serialization.spectrum_collection_to_xydata_node"
     ),
 }
 
@@ -65,6 +87,11 @@ def kpoints_data_to_qpoints(node: KpointsData) -> np.ndarray:
 def spectrum1d_to_xydata_node(spectrum: Any, user: Any = None) -> Any:  # noqa: ARG001
     """Serializer: euphonic Spectrum1D -> XyData (``user`` per the call convention)."""
     return spectrum1d_to_xydata(spectrum)
+
+
+def spectrum_collection_to_xydata_node(spectrum: Any, user: Any = None) -> Any:  # noqa: ARG001
+    """Serializer: euphonic Spectrum1DCollection -> XyData (``user`` per convention)."""
+    return spectrum_collection_to_xydata(spectrum)
 
 
 def force_constants_from_node(node: ForceConstantsData) -> Any:

@@ -2,5 +2,11 @@
 
 from .dispersion import DispersionWorkChain
 from .dos import DosWorkChain
+from .tosca import ToscaFromForceConstantsWorkChain, ToscaFromModesWorkChain
 
-__all__ = ["DispersionWorkChain", "DosWorkChain"]
+__all__ = [
+    "DispersionWorkChain",
+    "DosWorkChain",
+    "ToscaFromForceConstantsWorkChain",
+    "ToscaFromModesWorkChain",
+]

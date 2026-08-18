@@ -45,6 +45,20 @@ dependencies = [
     # pin (see https://github.com/pace-neutrons/Euphonic/pull/457), but for our
     # own reasons, not merely to track it. https://seekpath.readthedocs.io
     "seekpath>=2.2.1,<3",
+    # abinslib: almost-isotropic incoherent INS intensities (fundamentals +
+    # Mantid/AbINS-style combination modes) from Euphonic QpointPhononModes.
+    # https://github.com/isisneutronmuon/abINS_lib -- alpha ("Development Status
+    # :: 3 - Alpha") with an announced API change already on its `main` branch
+    # (`apply_cross_section` -> `apply_weights`), so pinned to the tested 0.1
+    # release rather than the wider bounds this project otherwise prefers. See
+    # Decision 11 in openspec/changes/abinslib-workflow/design.md.
+    "abinslib==0.1.*",
+    # resins: instrument resolution functions (e.g. TOSCA's energy-dependent
+    # broadening). https://github.com/pace-neutrons/resins -- pre-1.0; its own
+    # README advises pinning to a specific minor version, and abinslib 0.1
+    # already requires resins==0.1.0 exactly, so the resolver enforces this
+    # regardless of what we declare. See Decision 11 in design.md.
+    "resins~=0.1.0",
 ]
 
 [dependency-groups]
@@ -77,6 +91,8 @@ doc = [
 [project.entry-points."aiida.workflows"]
 "pythonjob_ins.dispersion" = "aiida_pythonjob_ins.workflows.dispersion:DispersionWorkChain"
 "pythonjob_ins.dos" = "aiida_pythonjob_ins.workflows.dos:DosWorkChain"
+"pythonjob_ins.tosca_from_modes" = "aiida_pythonjob_ins.workflows.tosca:ToscaFromModesWorkChain"
+"pythonjob_ins.tosca_from_force_constants" = "aiida_pythonjob_ins.workflows.tosca:ToscaFromForceConstantsWorkChain"
 
 # --- Euphonic wheel workaround (aarch64-Linux only) ----------------------------
 # On aarch64-Linux, PyPI has no 2.x wheel yet. `find-links = ["wheels"]` allows uv
@@ -157,5 +173,7 @@ ignore = [
     "INP001",  # gallery scripts are not an importable package
     "E402",    # sphinx-gallery examples interleave prose cells and imports
     "T201",    # `print` is useful narration in a tutorial
+    "S101",    # an example demonstrating result reuse must *assert* it happened,
+               # so a silent loss of cacheability fails the docs build
 ]
 

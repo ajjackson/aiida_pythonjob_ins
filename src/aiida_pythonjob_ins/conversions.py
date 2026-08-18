@@ -35,7 +35,7 @@ from typing import Any
 
 import numpy as np
 from aiida.orm import BandsData, KpointsData, StructureData, XyData
-from euphonic import Crystal, ureg
+from euphonic import Crystal, Spectrum1DCollection, ureg
 
 
 def crystal_to_structure(crystal: Crystal) -> StructureData:
@@ -118,6 +118,146 @@ def spectrum1d_to_xydata(spectrum: Any) -> XyData:
     xy.set_x(x_values, "energy", x_unit)
     xy.set_y(spectrum.y_data.magnitude, "density_of_states", y_unit)
     return xy
+
+
+# Metadata keys rendered without decoration in a legend label, in the order
+# they are combined when more than one varies at once (most specific last, so
+# e.g. "C (order 2)" reads as "carbon, second-order combination").
+_LABEL_KEY_ORDER = ("atom_symbol", "quantum_order", "detector_angle")
+
+# Present on every line but not meaningful in a legend: atom_symbol already
+# identifies the atom for plotting purposes, and abinslib's `atom_index` merely
+# distinguishes same-element atoms from each other, which would make every line
+# "vary" and defeat the point of only labelling what differs usefully.
+_LABEL_EXCLUDED_KEYS = frozenset({"atom_index"})
+
+
+def _format_label_value(key: str, value: Any) -> str:
+    """Render one metadata key/value pair for use in a legend label."""
+    if key == "quantum_order":
+        return f"order {value}"
+    if key == "detector_angle":
+        return f"{value}\N{DEGREE SIGN}"
+    return str(value)
+
+
+def spectrum_collection_labels(collection: Spectrum1DCollection) -> list[str]:
+    """Derive a concise, human-readable legend label for each line of a collection.
+
+    Only the ``line_data`` metadata keys that actually differ between lines are
+    used, so a collection already grouped down to one line -- where every key is
+    common rather than varying -- is labelled ``"Total"`` instead of repeating
+    metadata that no longer distinguishes anything.
+
+    ``atom_symbol``, if it varies, is rendered bare (``"C"``); other varying keys
+    are appended in parentheses (``"C (order 2)"``) in the fixed order
+    atom_symbol/quantum_order/detector_angle, with any other, unrecognised keys
+    appended afterwards in sorted order for determinism. This is deliberately a
+    plotting convenience, not a lossless encoding -- the full metadata travels
+    separately (see :func:`spectrum_collection_to_xydata`).
+    """
+    line_data: list[dict[str, Any]] = list(
+        collection.metadata.get("line_data") or [{}] * len(collection)
+    )
+    if not line_data:
+        return []
+
+    all_keys = {key for line in line_data for key in line} - _LABEL_EXCLUDED_KEYS
+    varying = {
+        key for key in all_keys if len({line.get(key) for line in line_data}) > 1
+    }
+    if not varying:
+        return ["Total"] * len(line_data)
+
+    ordered_keys = [key for key in _LABEL_KEY_ORDER if key in varying]
+    ordered_keys += sorted(varying - set(ordered_keys))
+
+    labels = []
+    for line in line_data:
+        parts = [
+            _format_label_value(key, line[key]) for key in ordered_keys if key in line
+        ]
+        if not parts:
+            label = "Total"
+        elif ordered_keys[0] == "atom_symbol" and len(parts) > 1:
+            label = f"{parts[0]} ({', '.join(parts[1:])})"
+        else:
+            label = ", ".join(parts).capitalize()
+        labels.append(label)
+    return labels
+
+
+def spectrum_collection_to_xydata(collection: Spectrum1DCollection) -> XyData:
+    """Convert a Euphonic ``Spectrum1DCollection`` to a native ``XyData``.
+
+    Like :func:`spectrum1d_to_xydata`, one x array of bin centres is shared by
+    every line; unlike it, there are several y arrays (one per line), and the
+    collection's metadata -- which is what actually distinguishes the lines --
+    would otherwise be lost. It is preserved on the node as two attributes:
+
+    * ``spectrum_metadata`` -- the metadata common to the whole collection;
+    * ``spectrum_line_data`` -- the list of per-line metadata dicts.
+
+    Both are ordinary AiiDA node attributes: JSON-serialisable Python values
+    attached before the node is stored, becoming immutable once it is (matching
+    the provenance guarantee AiiDA gives every stored node). They sit alongside
+    ``XyData``'s own attributes without collision (its arrays are namespaced
+    under an ``array|`` prefix). See :func:`xydata_to_spectrum_collection` for
+    the reverse direction, which is what makes this round trip reversible.
+
+    Each y array is additionally named with a concise label from
+    :func:`spectrum_collection_labels`, so ``for name, y, unit in xy.get_y()``
+    is directly plottable without parsing the attached metadata.
+    """
+    x_values = collection.get_bin_centres().magnitude
+    x_unit = f"{collection.x_data.units:~}"
+    y_unit = f"{collection.y_data.units:~}"
+
+    line_data = list(collection.metadata.get("line_data") or [{}] * len(collection))
+    common_metadata = {
+        key: value for key, value in collection.metadata.items() if key != "line_data"
+    }
+    labels = spectrum_collection_labels(collection)
+
+    xy = XyData()
+    xy.set_x(x_values, "energy", x_unit)
+    y_rows = list(collection.y_data.magnitude)
+    xy.set_y(y_rows, labels, [y_unit] * len(y_rows))
+    xy.base.attributes.set("spectrum_metadata", common_metadata)
+    xy.base.attributes.set("spectrum_line_data", line_data)
+    return xy
+
+
+def xydata_to_spectrum_collection(xy: XyData) -> Spectrum1DCollection:
+    """Convert a native ``XyData`` back to a Euphonic ``Spectrum1DCollection``.
+
+    The reverse of :func:`spectrum_collection_to_xydata`: rebuilds the
+    collection's metadata from the ``spectrum_metadata``/``spectrum_line_data``
+    node attributes, so the recovered collection can be grouped, selected and
+    summed by that metadata exactly as the original could -- which is what lets
+    the grouping step in
+    :mod:`aiida_pythonjob_ins.workflows.tosca` operate on data read back from
+    the graph rather than needing the original Python object.
+
+    Bin *centres* are recovered, not edges (see the module-level note on
+    :func:`spectrum1d_to_xydata`): the resulting collection is a point spectrum,
+    which is sufficient for grouping, summing and broadening but not for exact
+    rebinning.
+    """
+    _, x_values, x_unit = xy.get_x()
+    y_entries = xy.get_y()
+
+    common_metadata = xy.base.attributes.get("spectrum_metadata", {})
+    line_data = xy.base.attributes.get("spectrum_line_data", [{}] * len(y_entries))
+
+    y_values = np.stack([values for _, values, _ in y_entries])
+    (_, _, y_unit) = y_entries[0]
+
+    return Spectrum1DCollection(
+        x_data=np.asarray(x_values) * ureg(x_unit),
+        y_data=y_values * ureg(y_unit),
+        metadata={**common_metadata, "line_data": line_data},
+    )
 
 
 def modes_to_bands_data(

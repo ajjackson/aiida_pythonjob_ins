@@ -15,7 +15,12 @@ from aiida_pythonjob_ins.data import (
     ForceConstantsData,
     QpointPhononModesData,
 )
-from aiida_pythonjob_ins.workflows import DispersionWorkChain, DosWorkChain
+from aiida_pythonjob_ins.workflows import (
+    DispersionWorkChain,
+    DosWorkChain,
+    ToscaFromForceConstantsWorkChain,
+    ToscaFromModesWorkChain,
+)
 
 
 @pytest.mark.parametrize(
@@ -37,6 +42,11 @@ def test_data_plugin_registration(aiida_profile, entry_point_name, expected_clas
     [
         ("pythonjob_ins.dispersion", DispersionWorkChain),
         ("pythonjob_ins.dos", DosWorkChain),
+        ("pythonjob_ins.tosca_from_modes", ToscaFromModesWorkChain),
+        (
+            "pythonjob_ins.tosca_from_force_constants",
+            ToscaFromForceConstantsWorkChain,
+        ),
     ],
 )
 def test_workflow_plugin_registration(aiida_profile, entry_point_name, expected_class):

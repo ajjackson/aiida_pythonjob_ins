@@ -34,8 +34,22 @@ if TYPE_CHECKING:
 
 # Imported at module level (not under TYPE_CHECKING) because aiida-pythonjob
 # resolves the function's type hints at runtime via ``typing.get_type_hints``.
-from euphonic import ForceConstants, QpointPhononModes, Quantity, Spectrum1D, ureg
+from abinslib.almost_isotropic_incoherent import (
+    calculate_almost_isotropic_incoherent_spectra,
+    mantid_like_combination_spectra,
+)
+from abinslib.displacements import Displacements
+from abinslib.util import calculate_indirect_q2
+from euphonic import (
+    ForceConstants,
+    QpointPhononModes,
+    Quantity,
+    Spectrum1D,
+    Spectrum1DCollection,
+    ureg,
+)
 from euphonic.util import mode_gradients_to_widths, mp_grid
+from resins import Instrument
 
 # Library code only *emits* logs; it never configures handlers or levels -- the
 # host application (or AiiDA) decides how these are surfaced. When these functions
@@ -287,3 +301,306 @@ def calculate_dos(
         modes.frequencies, Quantity(energy_spacing, energy_unit)
     )
     return modes.calculate_dos(dos_bins, mode_widths=mode_widths)
+
+
+# --- TOSCA scattering-intensity operations -------------------------------------
+#
+# These wrap `abinslib` (almost-isotropic incoherent INS intensities) and
+# `resins` (instrument resolution functions). Like the rest of this module they
+# are plain, AiiDA-free functions using only public APIs; see the reference
+# pipeline (abINS_lib's TOSCA tutorial) cited in
+# openspec/changes/abinslib-workflow/design.md for the calculation this mirrors.
+# Coded against the installed `abinslib==0.1.*` release, not its `main` branch:
+# 0.1's `calculate_almost_isotropic_incoherent_spectra` takes
+# `apply_cross_section` (default `True`, applying incoherent+coherent
+# cross-sections in one step); `main` has replaced this with a separate
+# `apply_weights` call that 0.1 does not provide.
+
+
+def calculate_thermal_displacements(
+    modes: QpointPhononModes, temperature: float
+) -> tuple[Displacements, pint.Quantity]:
+    """Compute thermal mode/atomic displacements at a sample temperature.
+
+    Thin wrapper over ``Displacements.from_modes`` and
+    ``.to_atomic_displacements()``. The atomic displacements determine the
+    Debye-Waller attenuation applied by the intensity calculations below.
+
+    Parameters
+    ----------
+    modes
+        Phonon frequencies and eigenvectors.
+    temperature
+        Sample temperature in kelvin.
+
+    Returns
+    -------
+    tuple[Displacements, pint.Quantity]
+        The per-mode displacement dataset and the derived per-atom
+        displacement tensor (``Quantity``, shape ``(n_atoms, 3, 3)``).
+    """
+    mode_displacements = Displacements.from_modes(modes, Quantity(temperature, "K"))
+    atomic_displacements = mode_displacements.to_atomic_displacements()
+    LOGGER.info(
+        "Computed thermal displacements at %s K for %d atoms",
+        temperature,
+        modes.crystal.n_atoms,
+    )
+    return mode_displacements, atomic_displacements
+
+
+def calculate_scattering_q2(
+    energy_transfer: pint.Quantity,
+    detector_angle: float,
+    final_energy: float,
+    *,
+    energy_unit: str = "1/cm",
+) -> pint.Quantity:
+    """Indirect-geometry Q² for a scattering angle and analyser final energy.
+
+    Thin wrapper over ``abinslib.util.calculate_indirect_q2`` that takes the
+    detector angle in degrees (the natural unit for describing a bank) rather
+    than radians, and the final energy as a plain float in ``energy_unit``
+    (matching the other TOSCA operations' unit convention) rather than a
+    pre-built ``Quantity``.
+
+    Called once per detector bank, with ``energy_transfer`` set to the mode
+    frequencies for the fundamental calculation and to the output bin centres
+    for the combination-mode calculation -- the two kinematic evaluations the
+    reference pipeline performs.
+    """
+    return calculate_indirect_q2(
+        energy_transfer,
+        angle=np.deg2rad(detector_angle),
+        final_energy=Quantity(final_energy, energy_unit),
+    )
+
+
+def tosca_energy_bins(
+    frequencies: pint.Quantity,
+    energy_spacing: pint.Quantity,
+    energy_max: pint.Quantity,
+    *,
+    max_quantum_order: int = 2,
+) -> pint.Quantity:
+    """Build the TOSCA energy axis: data-sized, then clipped to the instrument.
+
+    Reuses :func:`default_energy_bins`' padding and bin-alignment rule, sized
+    from the fundamental frequencies scaled by the highest quantum order to be
+    computed (combination modes extend to roughly that multiple of the
+    fundamental range), then clips to whichever of the data range or
+    ``energy_max`` is tighter.
+
+    The lower end is additionally clipped at zero. Unlike a density of states,
+    where a negative energy indicates a real, physically meaningful soft mode,
+    TOSCA measures only energy loss from the neutron to the sample: an energy
+    transfer below zero (let alone below ``-final_energy``) is kinematically
+    inaccessible, and evaluating the Q² relation there produces nonsense
+    (``calculate_scattering_q2`` takes a square root that goes complex). A
+    q-point mesh's small numerical noise around an acoustic mode at the zone
+    centre is enough to trigger asymmetric padding on the negative side, so
+    this clip is not merely a corner case.
+    """
+    data_bins = default_energy_bins(frequencies * max_quantum_order, energy_spacing)
+    zero = Quantity(0, energy_spacing.units)
+    return data_bins[(data_bins >= zero) & (data_bins <= energy_max)]
+
+
+def broaden_tosca_spectrum(
+    spectrum: Spectrum1D | Spectrum1DCollection,
+    resolution_model: str = "AbINS_v1",
+) -> Spectrum1D | Spectrum1DCollection:
+    """Apply TOSCA's energy-dependent resolution broadening to a spectrum.
+
+    Broadens on the spectrum's own bin centres (``points == mesh``), so no
+    rebinning takes place -- only the resolution-smeared intensity changes.
+    Because ``resins``' broadening operator is linear, this gives the same
+    result whether applied before or after summing lines (see
+    ``group_spectra``/``broaden_spectra`` in
+    :mod:`aiida_pythonjob_ins.workflows.tosca`, which rely on this).
+
+    A collection is broadened line by line: the underlying ``resins`` model
+    only accepts a single 1-D intensity array per call (see
+    ``InstrumentModel.broaden``), not a 2-D stack of lines.
+    """
+    resolution = Instrument.from_default("TOSCA").get_resolution_function(
+        resolution_model
+    )
+    x_mev = spectrum.get_bin_centres().to("meV").magnitude
+
+    if isinstance(spectrum, Spectrum1DCollection):
+        broadened_y = np.stack(
+            [
+                resolution.broaden(points=x_mev[:, None], data=line_y, mesh=x_mev)
+                for line_y in spectrum.y_data.magnitude
+            ]
+        )
+    else:
+        broadened_y = resolution.broaden(
+            points=x_mev[:, None], data=spectrum.y_data.magnitude, mesh=x_mev
+        )
+
+    broadened = type(spectrum)(
+        x_data=spectrum.x_data,
+        y_data=Quantity(broadened_y, spectrum.y_data.units),
+        x_tick_labels=spectrum.x_tick_labels,
+        metadata=spectrum.metadata,
+    )
+    LOGGER.info("Applied '%s' resolution broadening", resolution_model)
+    return broadened
+
+
+def interpolate_phonon_modes_on_grid(
+    force_constants: ForceConstants,
+    q_spacing: float = 0.1,
+    *,
+    asr: str | None = "reciprocal",
+) -> QpointPhononModes:
+    """Interpolate phonon modes on a Monkhorst-Pack grid (a powder average).
+
+    Unlike :func:`interpolate_phonon_modes`, which evaluates a caller-supplied
+    set of q-points (e.g. a high-symmetry band path), this samples the whole
+    Brillouin zone the way :func:`calculate_dos` does -- the sampling
+    :class:`ToscaFromForceConstantsWorkChain
+    <aiida_pythonjob_ins.workflows.tosca.ToscaFromForceConstantsWorkChain>` needs.
+    The almost-isotropic incoherent approximation disregards actual q-point
+    *positions* (see the reference pipeline's kinematic treatment in
+    :func:`calculate_tosca_spectrum`), but still needs a representative *density*
+    of modes across the zone, exactly as a DOS does.
+
+    Parameters
+    ----------
+    force_constants
+        Interatomic force constants to interpolate from.
+    q_spacing
+        Target spacing of the sampling grid, in 1/Angstrom (finer -> denser grid).
+    asr
+        Acoustic sum rule applied during interpolation (``None`` to disable).
+    """
+    grid = force_constants.crystal.get_mp_grid_spec(
+        spacing=q_spacing * ureg("1/angstrom")
+    )
+    qpts = mp_grid(grid)
+    LOGGER.info(
+        "Interpolating modes on a %dx%dx%d grid (%d q-points) for TOSCA",
+        *grid,
+        len(qpts),
+    )
+    return force_constants.calculate_qpoint_phonon_modes(
+        qpts, asr=asr, reduce_qpts=False
+    )
+
+
+def calculate_tosca_spectrum(
+    modes: QpointPhononModes,
+    temperature: float = 10.0,
+    energy_spacing: float = 10.0,
+    energy_max: float = 4000.0,
+    detector_angles: list[float] | None = None,
+    final_energy: float = 32.0,
+    energy_unit: str = "1/cm",
+) -> Spectrum1DCollection:
+    """Compute the full, ungrouped TOSCA intensity line set from phonon modes.
+
+    Combines fundamental (one-phonon) and combination (two-phonon) intensities
+    in the almost-isotropic incoherent approximation, for every requested
+    detector bank, into a single collection with one line per atom, quantum
+    order and detector angle -- mirroring the reference pipeline's
+    ``fundamentals + second_order`` sum, repeated per bank.
+
+    Parameters
+    ----------
+    modes
+        Phonon frequencies and eigenvectors (e.g. from a molecular-crystal
+        calculation; the almost-isotropic approximation assumes hydrogenous,
+        largely incoherent scattering).
+    temperature
+        Sample temperature in kelvin, governing the Debye-Waller attenuation.
+    energy_spacing, energy_max
+        Energy axis bin width and instrument-range cutoff, in ``energy_unit``.
+        See :func:`tosca_energy_bins`.
+    detector_angles
+        Scattering angles in degrees, one per detector bank to evaluate.
+        Defaults to TOSCA's backward (135°) and forward (45°) banks.
+    final_energy
+        Analyser-fixed final neutron energy, in ``energy_unit``.
+    energy_unit
+        Unit for ``energy_spacing``, ``energy_max`` and ``final_energy``.
+        TOSCA results are conventionally reported in wavenumbers.
+
+    Returns
+    -------
+    Spectrum1DCollection
+        One line per (atom, quantum order, detector angle), each carrying that
+        triple in its ``line_data`` metadata under ``atom_symbol``,
+        ``quantum_order`` and ``detector_angle``. Not yet grouped or broadened.
+    """
+    if detector_angles is None:
+        detector_angles = [135.0, 45.0]
+
+    mode_displacements, atomic_displacements = calculate_thermal_displacements(
+        modes, temperature
+    )
+    bins = tosca_energy_bins(
+        modes.frequencies,
+        Quantity(energy_spacing, energy_unit),
+        Quantity(energy_max, energy_unit),
+    )
+    bin_centres = (bins[1:] + bins[:-1]) / 2
+
+    LOGGER.info(
+        "Computing TOSCA spectrum: %d atoms, %d banks, %d energy bins",
+        modes.crystal.n_atoms,
+        len(detector_angles),
+        len(bins) - 1,
+    )
+
+    per_bank_spectra = []
+    for detector_angle in detector_angles:
+        fundamental_q2 = calculate_scattering_q2(
+            modes.frequencies, detector_angle, final_energy, energy_unit=energy_unit
+        )
+        combination_q2 = calculate_scattering_q2(
+            bin_centres, detector_angle, final_energy, energy_unit=energy_unit
+        )
+        fundamentals = calculate_almost_isotropic_incoherent_spectra(
+            modes=modes,
+            mode_displacements=mode_displacements,
+            atomic_displacements=atomic_displacements,
+            nominal_q2=fundamental_q2,
+            bins=bins,
+        )
+        combinations = mantid_like_combination_spectra(
+            modes, mode_displacements, atomic_displacements, combination_q2, bins
+        )
+
+        # Collapse the q-point dimension. abinslib 0.1's
+        # mantid_like_combination_spectra calls `spectra.group_by("atom_index")`
+        # for its own documented purpose ("combine q-point contributions") but
+        # discards the result rather than returning it (group_by returns a new
+        # collection; it does not mutate in place), so it hands back one line per
+        # atom *per q-point*, still carrying a `qpt` key.
+        #
+        # That is numerically harmless to a caller that regroups or sums -- which
+        # abinslib's own TOSCA example does, so it is not visibly broken there.
+        # We cannot ignore it: `components` is committed to the provenance graph
+        # with one line per atom, quantum order and detector bank, so the
+        # duplicates would multiply the stored y arrays by the q-point count and
+        # make `qpt` a varying key in every plot label.
+        #
+        # Grouping on (atom_index, quantum_order) -- the full set of keys that
+        # identifies a line at this stage -- merges the q-point duplicates and
+        # nothing else. Grouping on atom_index alone would give the same answer
+        # today, but would silently sum across orders should a future abinslib
+        # return more than one order in a single collection.
+        bank_spectrum = (fundamentals + combinations).group_by(
+            "atom_index", "quantum_order"
+        )
+        for line_data in bank_spectrum.metadata["line_data"]:
+            line_data["detector_angle"] = detector_angle
+        per_bank_spectra.append(bank_spectrum)
+
+    spectrum = per_bank_spectra[0]
+    for extra in per_bank_spectra[1:]:
+        spectrum = spectrum + extra
+    return spectrum

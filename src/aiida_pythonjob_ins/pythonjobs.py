@@ -29,7 +29,9 @@ from aiida_pythonjob_ins.operations import (
     band_path_qpoints,
     calculate_dispersion,
     calculate_dos,
+    calculate_tosca_spectrum,
     interpolate_phonon_modes,
+    interpolate_phonon_modes_on_grid,
     read_force_constants_from_castep,
     read_force_constants_from_phonopy,
 )
@@ -42,12 +44,16 @@ __all__ = [
     "band_path_qpoints",
     "calculate_dispersion",
     "calculate_dos",
+    "calculate_tosca_spectrum",
     "interpolate_phonon_modes",
+    "interpolate_phonon_modes_on_grid",
     "prepare_dispersion_inputs",
     "prepare_dos_inputs",
+    "prepare_grid_interpolation_inputs",
     "prepare_interpolation_inputs",
     "prepare_read_force_constants_inputs",
     "prepare_read_phonopy_inputs",
+    "prepare_tosca_spectrum_inputs",
     "read_force_constants_from_castep",
     "read_force_constants_from_phonopy",
 ]
@@ -212,6 +218,79 @@ def prepare_dos_inputs(
             "force_constants": force_constants,
             "q_spacing": q_spacing,
             "energy_spacing": energy_spacing,
+        },
+        serializers=EUPHONIC_SERIALIZERS,
+        deserializers=EUPHONIC_DESERIALIZERS,
+        computer=computer,
+        code=code,
+        **kwargs,
+    )
+
+
+def prepare_grid_interpolation_inputs(
+    force_constants: orm.Data,
+    q_spacing: float = 0.1,
+    *,
+    computer: str | orm.Computer = "localhost",
+    code: orm.AbstractCode | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Build inputs to run :func:`interpolate_phonon_modes_on_grid` as a PythonJob.
+
+    ``q_spacing`` is the target Monkhorst-Pack grid spacing (1/Angstrom), matching
+    :func:`prepare_dos_inputs`'s convention. Used by
+    ``ToscaFromForceConstantsWorkChain`` to obtain a powder-average q-point
+    sampling for the TOSCA intensity calculation, as distinct from
+    :func:`prepare_interpolation_inputs`'s caller-supplied path (used for a band
+    structure).
+    """
+    return prepare_pythonjob_inputs(
+        function=interpolate_phonon_modes_on_grid,
+        function_inputs={"force_constants": force_constants, "q_spacing": q_spacing},
+        serializers=EUPHONIC_SERIALIZERS,
+        deserializers=EUPHONIC_DESERIALIZERS,
+        computer=computer,
+        code=code,
+        **kwargs,
+    )
+
+
+def prepare_tosca_spectrum_inputs(
+    modes: orm.Data,
+    temperature: float = 10.0,
+    energy_spacing: float = 10.0,
+    energy_max: float = 4000.0,
+    detector_angles: list[float] | None = None,
+    final_energy: float = 32.0,
+    energy_unit: str = "1/cm",
+    *,
+    computer: str | orm.Computer = "localhost",
+    code: orm.AbstractCode | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Build inputs to run :func:`calculate_tosca_spectrum` as a PythonJob.
+
+    ``modes`` is a :class:`~aiida_pythonjob_ins.data.QpointPhononModesData` node,
+    deserialized to a Euphonic ``QpointPhononModes`` before the function runs.
+    The returned ``Spectrum1DCollection`` -- the full, ungrouped line set -- is
+    serialized to a single native ``XyData`` with one y array per line (see
+    :func:`aiida_pythonjob_ins.conversions.spectrum_collection_to_xydata`).
+
+    ``detector_angles`` defaults to ``None`` here (rather than a mutable literal
+    default) and is passed through unchanged; :func:`calculate_tosca_spectrum`
+    supplies the actual default (TOSCA's two banks) so it is documented in one
+    place.
+    """
+    return prepare_pythonjob_inputs(
+        function=calculate_tosca_spectrum,
+        function_inputs={
+            "modes": modes,
+            "temperature": temperature,
+            "energy_spacing": energy_spacing,
+            "energy_max": energy_max,
+            "detector_angles": detector_angles,
+            "final_energy": final_energy,
+            "energy_unit": energy_unit,
         },
         serializers=EUPHONIC_SERIALIZERS,
         deserializers=EUPHONIC_DESERIALIZERS,
