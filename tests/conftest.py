@@ -63,6 +63,18 @@ def quartz_castep_bin() -> Path:
 
 
 @pytest.fixture
+def ethanol_modes_json() -> Path:
+    """Path to the bundled ethanol phonon-modes JSON.
+
+    A gamma-point ``QpointPhononModes`` dump vendored from ``abinslib``'s own
+    test suite (see ``tests/data/README.md`` for provenance). Hydrogenous and
+    molecular, unlike the quartz sample, so it is representative of TOSCA's
+    usual application (see design.md's Decision 13).
+    """
+    return DATA_DIR / "ethanol_qpoint_phonon_modes.json"
+
+
+@pytest.fixture
 def phonopy_dir() -> Path:
     """Directory of the bundled NaCl Phonopy example (from the Euphonic suite)."""
     return DATA_DIR / "phonopy" / "NaCl_default"

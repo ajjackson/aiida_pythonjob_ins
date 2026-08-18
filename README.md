@@ -81,17 +81,29 @@ block from `pyproject.toml`.
   the phonon band structure with no AiiDALab dependency.
 - **Atomic operations** (plain public-API functions): `band_path_qpoints`
   (seekpath; structure only), `read_force_constants_from_castep` and
-  `interpolate_phonon_modes` (plus a `calculate_dispersion` convenience). The
-  compute-heavy read/interpolate ops run as `aiida-pythonjob` `PythonJob`s.
+  `interpolate_phonon_modes` (plus a `calculate_dispersion` convenience), and
+  `calculate_tosca_spectrum` (inelastic-neutron-scattering intensities via
+  `abinslib` + `resins`). The compute-heavy ops run as `aiida-pythonjob`
+  `PythonJob`s.
 - **Input formats**: read force constants from CASTEP (`.castep_bin`) or from
-  Phonopy output (`phonopy.yaml` + `FORCE_CONSTANTS` [+ `BORN`]).
-- **Workflows** (both accept a `castep_file` *or* a pre-built `force_constants`
-  node, so they work equally from CASTEP or Phonopy input):
+  Phonopy output (`phonopy.yaml` + `FORCE_CONSTANTS` [+ `BORN`]); read phonon
+  modes from a Euphonic `QpointPhononModes` JSON dump.
+- **Workflows** starting from force constants (each accepts a `castep_file` *or*
+  a pre-built `force_constants` node, so they work equally from CASTEP or
+  Phonopy input):
   - `DispersionWorkChain` chains a read PythonJob with three `calcfunction`s
     (extract structure, build q-point path, compose `BandsData`) and an
     interpolation PythonJob, with full provenance.
   - `DosWorkChain` computes a phonon density of states (Monkhorst-Pack sampling +
     adaptive broadening) as a native `XyData`.
+  - `ToscaFromForceConstantsWorkChain` samples modes across the Brillouin zone
+    and delegates to `ToscaFromModesWorkChain` below, re-exposing its outputs.
+- **Workflows** starting from phonon modes:
+  - `ToscaFromModesWorkChain` simulates the spectrum the TOSCA spectrometer
+    would record: a PythonJob computes the full line set (per atom, quantum
+    order and detector bank) as a native `XyData`, then `calcfunction`s group
+    and resolution-broaden it. Splitting the steps this way means regrouping
+    reuses the cached intensity calculation.
 
 ## Usage sketch
 
