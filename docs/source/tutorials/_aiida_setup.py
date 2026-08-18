@@ -49,8 +49,19 @@ def get_python_code():
     ``core.direct`` localhost computer running this interpreter -- enough to
     execute PythonJobs during the docs build.
     """
+    # `runner.poll.interval` defaults to 60 s, and a WorkChain awaiting a child
+    # process (`self.submit` + `ToContext`) pays it once per child -- turning a
+    # seconds-long example into a minutes-long one. AiiDA waives it for *test*
+    # profiles (`Manager.create_runner`: `poll_interval = 0.0 if
+    # profile.is_test_profile else ...`), which is why the pytest suite never sees
+    # this, but a profile built here is not flagged as one. Setting the option on
+    # the profile is the supported route: profile options take priority over the
+    # config and the built-in default (`Manager.get_option`).
     load_profile(
-        SqliteTempBackend.create_profile("pythonjob-ins-docs"), allow_switch=True
+        SqliteTempBackend.create_profile(
+            "pythonjob-ins-docs", options={"runner.poll.interval": 0}
+        ),
+        allow_switch=True,
     )
 
     try:
