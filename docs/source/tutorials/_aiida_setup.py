@@ -87,20 +87,47 @@ def get_python_code():
         ).store()
 
 
-def show_provenance(node, title: str = "Provenance graph"):
-    """Display the provenance ancestry of ``node`` as a matplotlib figure.
+def show_provenance(
+    node,
+    title: str = "Provenance graph",
+    max_width_inches: float = 12.0,
+    dpi: int = 100,
+):
+    """Display the provenance graph around ``node`` as a matplotlib figure.
 
-    Renders the AiiDA/Graphviz graph to a PNG and shows it via ``imshow`` so that
-    sphinx-gallery captures it like any other figure.
+    Traverses **both** directions, because either alone tells half the story:
+
+    * ``recurse_descendants`` -- what the process *did*: the steps it called and
+      the data handed between them. Without this a ``WorkChain`` renders as a
+      single opaque box, since its called steps are descendants (via ``CALL``
+      links), not ancestors.
+    * ``recurse_ancestors`` -- where its inputs came from. Usually just the input
+      nodes, but an input may itself have been produced by an earlier
+      calculation (as the Phonopy example's force constants are), and that
+      history is worth showing.
+
+    Laid out top-to-bottom: these graphs are chains of a few steps, so
+    left-to-right makes them extremely wide (11:1 for the nested TOSCA workflow)
+    and the labels unreadable once scaled into a figure.
+
+    Renders to a PNG and shows it via ``imshow`` so sphinx-gallery captures it
+    like any other figure.
     """
     graph = Graph()
     graph.recurse_ancestors(node, annotate_links="both")
-    graph.graphviz.attr(rankdir="LR")
+    graph.recurse_descendants(node, annotate_links="both")
+    graph.graphviz.attr(rankdir="TB")
     with tempfile.TemporaryDirectory() as tmpdir:
         png = graph.graphviz.render(f"{tmpdir}/provenance", format="png", cleanup=True)
         image = plt.imread(png)
 
-    fig, ax = plt.subplots(figsize=(9, 6))
+    # Size the figure from the rendered image rather than fixing it: a fixed
+    # figsize squeezes a large graph until its labels are illegible. Pixels map
+    # roughly 1:1 up to ``max_width_inches``, beyond which the graph is scaled
+    # down to fit the page.
+    height, width = image.shape[:2]
+    scale = min(1.0, max_width_inches * dpi / width)
+    fig, ax = plt.subplots(figsize=(width * scale / dpi, height * scale / dpi), dpi=dpi)
     ax.imshow(image)
     ax.set_axis_off()
     ax.set_title(title)
