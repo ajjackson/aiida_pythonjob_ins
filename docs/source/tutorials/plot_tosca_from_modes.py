@@ -51,39 +51,44 @@ modes = QpointPhononModesData.from_json_file(
 # Caching is enabled explicitly rather than relying on the ambient configuration,
 # so the second run below can demonstrably reuse the expensive step.
 
-from aiida.manage.caching import enable_caching
+from aiida.manage.configuration import get_config
 
 # The process type aiida-pythonjob registers PythonJob under.
 PYTHONJOB_PROCESS_TYPE = "aiida.calculations:pythonjob.pythonjob"
 
-with enable_caching(identifier=PYTHONJOB_PROCESS_TYPE):
-    by_order_results, by_order_node = run_get_node(
-        ToscaFromModesWorkChain,
-        modes=modes,
-        temperature=orm.Float(10.0),  # kelvin
-        energy_spacing=orm.Float(10.0),  # 1/cm
-        group_by=orm.List(list=["quantum_order"]),
-        code=code,
-    )
-    print(f"WorkChain finished OK: {by_order_node.is_finished_ok}")
+# `aiida.manage.caching.enable_caching` is the usual way to do this in a script,
+# but it is a context manager, and everything it covers would have to be indented
+# into a single block -- which would collapse the separately explained steps below
+# into one. Setting the option achieves the same thing without that constraint.
+get_config().set_option("caching.enabled_for", [PYTHONJOB_PROCESS_TYPE])
 
-    # %%
-    # Run again, grouped by element
-    # -----------------------------
-    # Only the grouping keys differ, so the expensive intensity calculation is
-    # taken from the cache and only the cheap grouping and broadening steps run
-    # again. This is the point of committing the ungrouped line set to the graph
-    # as its own output.
+by_order_results, by_order_node = run_get_node(
+    ToscaFromModesWorkChain,
+    modes=modes,
+    temperature=orm.Float(10.0),  # kelvin
+    energy_spacing=orm.Float(10.0),  # 1/cm
+    group_by=orm.List(list=["quantum_order"]),
+    code=code,
+)
+print(f"WorkChain finished OK: {by_order_node.is_finished_ok}")
 
-    by_element_results, by_element_node = run_get_node(
-        ToscaFromModesWorkChain,
-        modes=modes,
-        temperature=orm.Float(10.0),
-        energy_spacing=orm.Float(10.0),
-        group_by=orm.List(list=["atom_symbol"]),
-        code=code,
-    )
-    print(f"WorkChain finished OK: {by_element_node.is_finished_ok}")
+# %%
+# Run again, grouped by element
+# -----------------------------
+# Only the grouping keys differ, so the expensive intensity calculation is taken
+# from the cache and only the cheap grouping and broadening steps run again. This
+# is the point of committing the ungrouped line set to the graph as its own
+# output.
+
+by_element_results, by_element_node = run_get_node(
+    ToscaFromModesWorkChain,
+    modes=modes,
+    temperature=orm.Float(10.0),
+    energy_spacing=orm.Float(10.0),
+    group_by=orm.List(list=["atom_symbol"]),
+    code=code,
+)
+print(f"WorkChain finished OK: {by_element_node.is_finished_ok}")
 
 # %%
 # Confirm the expensive step was reused rather than repeated. Asserting this
