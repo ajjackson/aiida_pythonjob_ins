@@ -33,7 +33,7 @@ from __future__ import annotations
 from typing import Any
 
 from aiida.common import AttributeDict
-from aiida.engine import ToContext, WorkChain, calcfunction, if_
+from aiida.engine import ToContext, WorkChain, calcfunction
 from aiida.orm import AbstractCode, Dict, Float, List, Str, XyData, to_aiida_type
 from aiida_pythonjob import PythonJob
 
@@ -234,7 +234,8 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
     """Compute a TOSCA spectrum from force constants, via interpolated modes.
 
     Inherits :class:`~aiida_pythonjob_ins.workflows.base.ForceConstantsWorkChain`
-    for the force-constants source (a CASTEP file or a prepared node -- exactly
+    for the force-constants source (a CASTEP file, read in-process by the
+    ``read_castep_force_constants`` calcfunction, or a prepared node -- exactly
     one, as usual), interpolates modes on a Monkhorst-Pack grid (a powder
     average, matching :class:`~aiida_pythonjob_ins.workflows.dos.DosWorkChain`
     rather than the symmetry-path sampling of
@@ -246,8 +247,8 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
 
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step of this workflow's own
-          (the force-constants read, or the mode interpolation) did not finish
-          successfully.
+          (the mode interpolation) did not finish successfully.
+        * 410 (ERROR_READ_FAILED): The force constants could not be read.
         * 401 (ERROR_SPECTRUM_WORKCHAIN_FAILED): The delegated
           ``ToscaFromModesWorkChain`` did not finish successfully.
     """
@@ -278,8 +279,7 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
             },
         )
         spec.outline(
-            if_(cls.should_read_castep)(cls.read_force_constants),
-            cls.assign_force_constants,
+            cls.resolve_force_constants,
             cls.interpolate_modes,
             cls.compute_spectrum,
             cls.finalize,

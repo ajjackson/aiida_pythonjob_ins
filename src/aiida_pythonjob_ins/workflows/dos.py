@@ -1,14 +1,15 @@
 """A WorkChain computing a phonon density of states.
 
-After :class:`ForceConstantsWorkChain` resolves the force constants (read from a
-CASTEP file via a PythonJob, or taken from a supplied node), a single PythonJob
-samples a Monkhorst-Pack grid and computes the DOS; the euphonic ``Spectrum1D`` is
+After :class:`ForceConstantsWorkChain` resolves the force constants (read
+in-process from a CASTEP file by the ``read_castep_force_constants``
+calcfunction, or taken from a supplied node), a single PythonJob samples a
+Monkhorst-Pack grid and computes the DOS; the euphonic ``Spectrum1D`` is
 serialized to a native ``XyData`` for easy plotting.
 """
 
 from __future__ import annotations
 
-from aiida.engine import ToContext, if_
+from aiida.engine import ToContext
 from aiida.orm import Float, XyData
 from aiida_pythonjob import PythonJob
 
@@ -21,6 +22,7 @@ class DosWorkChain(ForceConstantsWorkChain):
 
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
+        * 410 (ERROR_READ_FAILED): The force constants could not be read.
     """
 
     @classmethod
@@ -39,8 +41,7 @@ class DosWorkChain(ForceConstantsWorkChain):
             help="DOS energy bin width, in meV.",
         )
         spec.outline(
-            if_(cls.should_read_castep)(cls.read_force_constants),
-            cls.assign_force_constants,
+            cls.resolve_force_constants,
             cls.compute_dos,
             cls.finalize,
         )

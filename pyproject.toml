@@ -118,6 +118,10 @@ filterwarnings = [
 [tool.ruff]
 line-length = 88
 src = ["src", "tests"]
+# OpenSpec planning artifacts (proposal/design/spec/tasks) are prose with
+# illustrative, non-executable code blocks; exclude them from both lint and the
+# formatter so the prose-aligned snippets are not reformatted.
+extend-exclude = ["openspec"]
 
 [tool.ruff.lint]
 # A broad, exemplar-quality rule set modelled on Euphonic's selection
