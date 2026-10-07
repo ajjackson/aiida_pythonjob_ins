@@ -46,25 +46,33 @@ Migrating file reading to an in-process `@calcfunction` makes the operation sync
 
 ### Decision 2: Decoupled Capability Mixins (`ForceConstantsMixin` and `JobDispatchMixin`)
 - **Choice**: Separate the two orthogonal concerns into mixins:
-  1. `ForceConstantsMixin`: Defines inputs `castep_file` (`SinglefileData`, optional) and `force_constants` (`ForceConstantsData`, optional), registers the mutual-exclusion validator, and implements synchronous `resolve_force_constants()`.
+  1. `ForceConstantsMixin`: Defines inputs `castep_file` (`SinglefileData`, optional) and `force_constants` (`ForceConstantsData`, optional), registers the mutual-exclusion validator, and implements synchronous `resolve_force_constants()`. Does **not** declare output ports, ensuring subclasses do not inherit an unfulfilled `force_constants` output.
   2. `JobDispatchMixin`: Defines inputs `code` (`AbstractCode`) and `options` (`Dict`, optional), implements `get_job_metadata()`, and registers exit code `400 (ERROR_SUB_PROCESS_FAILED)`.
+- **Cooperative MRO**: Every mixin's `define(cls, spec)` must call `super().define(spec)` so that AiiDA's `Process` metaclass cooperatively collects input and output ports across all classes in the MRO.
 - **Class composition**:
-  - `ForceConstantsWorkChain(ForceConstantsMixin, WorkChain)`: Exposes `force_constants` as output. Takes **no `code`** and **no `options`**.
-  - `DispersionWorkChain(ForceConstantsMixin, JobDispatchMixin, WorkChain)`: Inherits both.
-  - `DosWorkChain(ForceConstantsMixin, JobDispatchMixin, WorkChain)`: Inherits both.
+  - `ForceConstantsWorkChain(ForceConstantsMixin, WorkChain)`: A standalone workflow that resolves force constants and exposes `force_constants` as an output port in its own `define()` and `finalize()`. Takes **no `code`** and **no `options`**.
+  - `DispersionWorkChain(ForceConstantsMixin, JobDispatchMixin, WorkChain)`: Inherits both. Exposes its own outputs (`phonon_modes`, `structure`, `band_path`, `band_structure`).
+  - `DosWorkChain(ForceConstantsMixin, JobDispatchMixin, WorkChain)`: Inherits both. Exposes `dos`.
   - `ToscaFromForceConstantsWorkChain(ForceConstantsMixin, JobDispatchMixin, WorkChain)`: Inherits both.
   - `ToscaFromModesWorkChain(JobDispatchMixin, WorkChain)`: Inherits `JobDispatchMixin` directly, eliminating its duplicated `code`, `options`, and `get_job_metadata()` declarations.
 
 ### Decision 3: Safe Cooperative Validator Composition (`_compose_validators`)
 - **Problem**: In AiiDA / Plumpy, `PortNamespace.validator` is a plain setter (`self._validator = validator`). Setting `spec.inputs.validator = ...` in multiple mixins or subclasses silently overwrites previous validators rather than chaining them.
+- **Contract & Signature**: AiiDA namespace validators adhere to `(inputs: Mapping[str, Any], port: PortNamespace) -> str | None`. A validator returns `None` if validation passes, or an error string if invalid.
 - **Choice**: Introduce a helper in `src/aiida_pythonjob_ins/workflows/base.py`:
   ```python
   def _compose_validators(v_existing, v_new):
       """Compose two AiiDA PortNamespace validator callables.
 
       In Plumpy, assigning to ``spec.inputs.validator`` overwrites any existing
-      validator. This helper chains an existing validator with a new one so that
-      cooperative mixins do not clobber each other.
+      validator on that namespace. This helper chains an existing validator with
+      a new one so that cooperative mixins do not clobber each other.
+
+      Parameters
+      ----------
+      v_existing, v_new : callable or None
+          Validators accepting ``(inputs, port)`` and returning ``None`` on
+          success or an error message string on failure.
       """
       if v_existing is None:
           return v_new
@@ -107,7 +115,10 @@ Migrating file reading to an in-process `@calcfunction` makes the operation sync
       message="Failed to read force constants from the CASTEP file.",
   )
   ```
-- **Rationale**: Distinguishes local file parsing/format failures (exit status 410) from remote compute job failures (`ERROR_SUB_PROCESS_FAILED`, exit status 400).
+- **Exit Code Taxonomy**:
+  - `ERROR_READ_FAILED = 410`: specifically identifies local CASTEP file parsing or format failure in `read_castep_force_constants`.
+  - `ERROR_SUB_PROCESS_FAILED = 400`: reserved for child `PythonJob` CalcJob execution failures, provided by `JobDispatchMixin`.
+  - `ERROR_SPECTRUM_WORKCHAIN_FAILED = 401`: defined on `ToscaFromForceConstantsWorkChain` specifically to indicate delegated `ToscaFromModesWorkChain` failure (as verified in `test_tosca_from_force_constants_failure_is_distinguishable`). These failure modes remain distinct and unambiguous.
 
 ## Risks / Trade-offs
 
