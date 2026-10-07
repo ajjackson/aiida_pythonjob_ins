@@ -118,6 +118,12 @@ def prepare_read_force_constants_inputs(
     reads it by basename and returns a ``ForceConstants`` serialized to a
     :class:`~aiida_pythonjob_ins.data.ForceConstantsData` node.
 
+    .. note::
+       This builder demonstrates ``PythonJob`` file staging; none of this
+       package's workflows use it. Workflows that accept a ``castep_file`` read
+       it in-process instead: the read takes a fraction of a second, so
+       dispatching it as a job adds overhead without benefit.
+
     Parameters
     ----------
     castep_file

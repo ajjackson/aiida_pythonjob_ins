@@ -31,7 +31,7 @@ Prerequisite: `migrate-castep-reader-to-calcfunction`, which provides the in-pro
 - New force-constants formats (Phonopy, Euphonic JSON, VASP). These are later work, and so is the command-line import tool that needs format detection.
 - Changing how CASTEP files are read (see the prerequisite change).
 - Changing `ToscaFromForceConstantsWorkChain`'s `spectrum` namespace, including its existing `spectrum.options` overlap.
-- Removing `prepare_read_force_constants_inputs`. It remains the example of PythonJob file staging, exercised by `tests/test_remote_ssh.py`.
+- Cleaning up the read builders (`prepare_read_force_constants_inputs`, `prepare_read_phonopy_inputs`). After this change no workflow uses the CASTEP one, and the Phonopy one becomes unnecessary once `ForceConstantsWorkChain` accepts Phonopy input. That change should decide whether to remove them or turn them into builders that read force constants already on the remote computer (`RemoteData`). Either way, `pythonjob-execution` (the builder list and the staging requirement), the operations-without-AiiDA tests and the containerized SSH test, which only runs in the containerized suite, need revisiting. Until then the CASTEP builder stays, as the spec requires.
 
 ## Impact
 
