@@ -1,128 +1,64 @@
-# Design: Migrate CASTEP File Reading to In-Process Calcfunction and Refactor Workflow Mixins
+# Design: Read CASTEP force constants in-process
 
 ## Context
 
-In `ForceConstantsWorkChain` (`src/aiida_pythonjob_ins/workflows/base.py`), the outline historically executed:
-```python
-if_(cls.should_read_castep)(cls.read_force_constants),
-cls.assign_force_constants,
-...
-```
-`read_force_constants` submitted an out-of-process `PythonJob` CalcJob. Because `PythonJob` runs via the transport/scheduler system, it triggers file staging, background process submission, Python interpreter launch, dynamic library loading, and output retrieval—incurring ~2.8 seconds of overhead for ~0.1 seconds of actual parsing work (`ForceConstants.from_castep`).
-
-Migrating file reading to an in-process `@calcfunction` makes the operation synchronous and eliminates this overhead. However, it also changes the object-oriented structure:
-- `ForceConstantsWorkChain` currently declares `code` (`AbstractCode`) and `options` (`Dict`), which it never uses once reading is an in-process calcfunction.
-- Subclasses (`DispersionWorkChain`, `DosWorkChain`, `ToscaFromForceConstantsWorkChain`) still require `code` and `options` for their downstream compute jobs (`interpolate_phonon_modes`, `calculate_dos`, `interpolate_modes`).
-- `ToscaFromModesWorkChain` currently duplicates the `code`, `options`, and `get_job_metadata()` definitions because it does not inherit `ForceConstantsWorkChain`.
+`ForceConstantsWorkChain` (`workflows/base.py`) is an abstract base with no outline. It declares `castep_file`, `force_constants`, `code`, `options`, the "exactly one source" validator, exit code 400 and `get_job_metadata()`. Its subclasses start their outlines with `if_(cls.should_read_castep)(cls.read_force_constants), cls.assign_force_constants`. `read_force_constants` submits a `PythonJob` built by `prepare_read_force_constants_inputs`. When that job fails, `assign_force_constants` returns 400.
 
 ## Goals / Non-Goals
 
-**Goals:**
-- Replace the out-of-process `PythonJob` submission in `read_force_constants` with an in-process AiiDA `@calcfunction` (`read_castep_force_constants`).
-- Decouple the Force Constants Source concern (`castep_file` vs `force_constants`) from the Job Dispatch concern (`code`, `options`, `get_job_metadata()`, exit code 400) using reusable capability mixins.
-- Ensure no class or mixin declares input ports it does not use: `ForceConstantsWorkChain` becomes a clean standalone WorkChain taking only files/nodes and zero unused `code`/`options` ports.
-- Safely chain AiiDA namespace validators via `_compose_validators` to prevent accidental clobbering of `spec.inputs.validator`.
-- Streamline workchain outlines from the asynchronous 2-step pattern (`if_(should_read)(read) + assign`) into a single synchronous `resolve_force_constants` step.
-- Eliminate duplicated `code` and `options` port definitions in `ToscaFromModesWorkChain`.
+**Goals:** an in-process, provenance-recorded CASTEP read; a failure mode that callers can query; no change to the class structure.
 
-**Non-Goals:**
-- Modifying compute-heavy operations (`interpolate_phonon_modes`, `calculate_dos`, `calculate_tosca_spectrum`), which remain `PythonJob` CalcJobs.
-- Removing `prepare_read_force_constants_inputs` from `src/aiida_pythonjob_ins/pythonjobs.py` (it remains available for standalone remote staging if callers require it).
+**Non-Goals:** see proposal.md. `refactor-fcwc` later moves the read into a standalone `ForceConstantsWorkChain`. This design keeps the read in a form that moves without change.
 
 ## Decisions
 
-### Decision 1: Native `@calcfunction` for `read_castep_force_constants`
-- **Choice**: Use a standard AiiDA `@calcfunction` implemented in `src/aiida_pythonjob_ins/workflows/base.py`:
-  ```python
-  @calcfunction
-  def read_castep_force_constants(castep_file: SinglefileData) -> ForceConstantsData:
-      """Read CASTEP binary force constants into a ForceConstantsData node."""
-      with castep_file.as_path() as filepath:
-          fc = ForceConstants.from_castep(str(filepath))
-      return ForceConstantsData(fc)
-  ```
-- **Rationale**: AiiDA's `@calcfunction` is the idiomatic mechanism for in-process operations that construct AiiDA nodes (as used in `extract_structure` and `generate_band_path` in `dispersion.py`, and `group_spectra` in `tosca.py`). It requires no cloudpickling, does not spawn an asyncio task runner, and executes synchronously in under 100ms while generating a first-class `CalcFunctionNode` in the provenance graph. `SinglefileData.as_path()` reliably yields a `pathlib.Path` across all AiiDA storage backends.
-- **Scope & Visibility**: Kept internal to `src/aiida_pythonjob_ins/workflows/base.py` rather than actively promoted or exported in `aiida_pythonjob_ins.workflows.__all__`. Format-specific data conversion routines may evolve as additional force-constant sources are introduced.
+### 1. An in-process calcfunction that reuses `ForceConstantsData.from_castep`
 
-### Decision 2: Decoupled Capability Mixins (`ForceConstantsMixin` and `JobDispatchMixin`)
-- **Choice**: Separate the two orthogonal concerns into mixins:
-  1. `ForceConstantsMixin`: Defines inputs `castep_file` (`SinglefileData`, optional) and `force_constants` (`ForceConstantsData`, optional), registers the mutual-exclusion validator, and implements synchronous `resolve_force_constants()`. Does **not** declare output ports, ensuring subclasses do not inherit an unfulfilled `force_constants` output.
-  2. `JobDispatchMixin`: Defines inputs `code` (`AbstractCode`) and `options` (`Dict`, optional), implements `get_job_metadata()`, and registers exit code `400 (ERROR_SUB_PROCESS_FAILED)`.
-- **Cooperative MRO**: Every mixin's `define(cls, spec)` must call `super().define(spec)` so that AiiDA's `Process` metaclass cooperatively collects input and output ports across all classes in the MRO.
-- **Class composition**:
-  - `ForceConstantsWorkChain(ForceConstantsMixin, WorkChain)`: A standalone workflow that resolves force constants and exposes `force_constants` as an output port in its own `define()` and `finalize()`. Takes **no `code`** and **no `options`**.
-  - `DispersionWorkChain(ForceConstantsMixin, JobDispatchMixin, WorkChain)`: Inherits both. Exposes its own outputs (`phonon_modes`, `structure`, `band_path`, `band_structure`).
-  - `DosWorkChain(ForceConstantsMixin, JobDispatchMixin, WorkChain)`: Inherits both. Exposes `dos`.
-  - `ToscaFromForceConstantsWorkChain(ForceConstantsMixin, JobDispatchMixin, WorkChain)`: Inherits both.
-  - `ToscaFromModesWorkChain(JobDispatchMixin, WorkChain)`: Inherits `JobDispatchMixin` directly, eliminating its duplicated `code`, `options`, and `get_job_metadata()` declarations.
+```python
+@calcfunction
+def read_castep_force_constants(castep_file: SinglefileData) -> ForceConstantsData:
+    with castep_file.as_path() as path:
+        return ForceConstantsData.from_castep(path)   # plus Decision 2's error handling
+```
 
-### Decision 3: Safe Cooperative Validator Composition (`_compose_validators`)
-- **Problem**: In AiiDA / Plumpy, `PortNamespace.validator` is a plain setter (`self._validator = validator`). Setting `spec.inputs.validator = ...` in multiple mixins or subclasses silently overwrites previous validators rather than chaining them.
-- **Contract & Signature**: AiiDA namespace validators adhere to `(inputs: Mapping[str, Any], port: PortNamespace) -> str | None`. A validator returns `None` if validation passes, or an error string if invalid.
-- **Choice**: Introduce a helper in `src/aiida_pythonjob_ins/workflows/base.py`:
-  ```python
-  def _compose_validators(v_existing, v_new):
-      """Compose two AiiDA PortNamespace validator callables.
+- A calcfunction is AiiDA's mechanism for cheap, in-process steps that create nodes ([calculation functions](https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/calculations/concepts.html#calculation-functions)). It records a `CalcFunctionNode` linking the file to its output, and it can be cached. This package already uses calcfunctions for `extract_structure`, `generate_band_path`, `assemble_bands`, `group_spectra` and `broaden_spectra`.
+- `ForceConstantsData.from_castep` is the existing, specified constructor ("Force-constants nodes can be built directly from calculator output"). Reusing it avoids a second CASTEP-reading code path.
+- `SinglefileData.as_path()` exists in aiida-core 2.6.0 (it is absent in 2.5.0), which matches the `aiida-core>=2.6` pin.
+- It goes in `workflows/base.py`, is not exported and has no entry point. `refactor-fcwc` makes `ForceConstantsWorkChain` the public way to resolve force constants, so per-format calcfunctions stay internal.
 
-      In Plumpy, assigning to ``spec.inputs.validator`` overwrites any existing
-      validator on that namespace. This helper chains an existing validator with
-      a new one so that cooperative mixins do not clobber each other.
+*Rejected: keeping the `PythonJob`.* It costs about 2.8 s of job machinery for about 0.1 s of work, and the read needs neither a remote machine nor a lean environment.
 
-      Parameters
-      ----------
-      v_existing, v_new : callable or None
-          Validators accepting ``(inputs, port)`` and returning ``None`` on
-          success or an error message string on failure.
-      """
-      if v_existing is None:
-          return v_new
-      if v_new is None:
-          return v_existing
-      return lambda inputs, port: v_existing(inputs, port) or v_new(inputs, port)
-  ```
-  In `ForceConstantsMixin.define(spec)`:
-  ```python
-  spec.inputs.validator = _compose_validators(
-      spec.inputs.validator, cls._validate_force_constants_source
-  )
-  ```
+### 2. An unreadable file returns an `ExitCode`
 
-### Decision 4: Single-Step Synchronous `resolve_force_constants`
-- **Choice**: Replace the asynchronous 2-step outline (`if_(cls.should_read_castep)(cls.read_force_constants)`, `cls.assign_force_constants`) with a single synchronous outline step:
-  ```python
-  def resolve_force_constants(self):
-      """Resolve force constants from supplied node or read from CASTEP file."""
-      if "force_constants" in self.inputs:
-          self.ctx.force_constants = self.inputs.force_constants
-      else:
-          try:
-              self.ctx.force_constants = read_castep_force_constants(
-                  self.inputs.castep_file
-              )
-          except Exception as exc:
-              self.report(f"Failed to read CASTEP force constants: {exc}")
-              return self.exit_codes.ERROR_READ_FAILED
-      return None
-  ```
-- **Rationale**: The 2-step outline was an artifact of `PythonJob`'s asynchronous dispatch. With an in-process calcfunction, resolution happens synchronously in one step, simplifying the outline across all workchains.
+Inside the calcfunction, the exceptions Euphonic's reader raises on unreadable input are caught, and it returns `ExitCode(300, "Could not read CASTEP force constants: <reason>")`. Any other exception propagates.
 
-### Decision 5: Error Handling and Exit Codes
-- **Choice**: Add a dedicated exit code `ERROR_READ_FAILED = 410` on `ForceConstantsMixin`:
-  ```python
-  spec.exit_code(
-      410,
-      "ERROR_READ_FAILED",
-      message="Failed to read force constants from the CASTEP file.",
-  )
-  ```
-- **Exit Code Taxonomy**:
-  - `ERROR_READ_FAILED = 410`: specifically identifies local CASTEP file parsing or format failure in `read_castep_force_constants`.
-  - `ERROR_SUB_PROCESS_FAILED = 400`: reserved for child `PythonJob` CalcJob execution failures, provided by `JobDispatchMixin`.
-  - `ERROR_SPECTRUM_WORKCHAIN_FAILED = 401`: defined on `ToscaFromForceConstantsWorkChain` specifically to indicate delegated `ToscaFromModesWorkChain` failure (as verified in `test_tosca_from_force_constants_failure_is_distinguishable`). These failure modes remain distinct and unambiguous.
+- The AiiDA docs reserve the Excepted state for processes that "incurred an exception during execution". For a problem that "is easily foreseeable and classifiable", they recommend returning an `ExitCode`, which "makes it easier for a workflow calling the function to respond … and … to query for these specific failure modes" ([process functions: exit codes](https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/processes/functions.html#exit-codes)).
+- 300 follows the convention that 300–399 is "suggested for critical process errors" ([exit code conventions](https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/processes/usage.html#exit-code-conventions)).
+- The exception types to catch are not yet known. Task 1.1 determines them by passing junk and truncated bytes to `ForceConstants.from_castep`.
+
+*Rejected: letting it raise and wrapping the call in `try/except Exception` in the workflow.* That leaves an Excepted node for a foreseeable failure, and it also catches unrelated bugs.
+
+### 3. One source-resolution step
+
+The two outline entries `if_(cls.should_read_castep)(cls.read_force_constants), cls.assign_force_constants` become one, `cls.resolve_force_constants`:
+
+- if `force_constants` was supplied, set `self.ctx.force_constants` to it;
+- otherwise, `result, node = read_castep_force_constants.run_get_node(self.inputs.castep_file)`. If `node.is_finished_ok`, store `result` in `self.ctx.force_constants`; if not, call `self.report(node.exit_message)` and return `ERROR_READ_FAILED`.
+
+`should_read_castep`, `read_force_constants` and `assign_force_constants` are removed. Calcfunctions run synchronously in the step, so the split that existed only to wait on a submitted job is no longer needed.
+
+### 4. Exit code `410 ERROR_READ_FAILED` on the base
+
+| Code | Meaning |
+|---|---|
+| 400 `ERROR_SUB_PROCESS_FAILED` | a PythonJob failed (unchanged message) |
+| 410 `ERROR_READ_FAILED` | the force constants could not be read |
+| 401 `ERROR_SPECTRUM_WORKCHAIN_FAILED` | unchanged (`ToscaFromForceConstantsWorkChain`) |
+
+`code` and `options` stay on the base, because every concrete subclass still dispatches jobs. `refactor-fcwc` moves 410, together with the read step, into the standalone `ForceConstantsWorkChain`, and gives consumers their own sub-process code. The spec therefore states that the read-failure code is distinct, not its number.
 
 ## Risks / Trade-offs
 
-- **[Risk]** Test suites asserting that `read_force_constants` creates a `CalcJobNode` will fail until updated.  
-  $\rightarrow$ **Mitigation**: Update assertions in `tests/test_workflows.py` to assert `CalcFunctionNode` for the read step and `CalcJobNode` for compute steps.
-- **[Risk]** Multiple inheritance with AiiDA metaclasses requires strict cooperative `super().define(spec)` calls.  
-  $\rightarrow$ **Mitigation**: Verified via unit test that `super().define(spec)` across `ForceConstantsMixin`, `JobDispatchMixin`, and `WorkChain` resolves cleanly in MRO order.
+- [Catching too few exception types leaves some bad files as Excepted rather than 410.] → Task 1.1 derives the types from Euphonic's actual behaviour, and the test passes a junk file.
+- [Catching too broadly hides bugs.] → Only the types from task 1.1 are caught, never bare `Exception`.
+- [Workflows lose their in-workflow example of PythonJob file staging.] → `prepare_read_force_constants_inputs` and `tests/test_remote_ssh.py` keep that example; the docstrings point to them.
