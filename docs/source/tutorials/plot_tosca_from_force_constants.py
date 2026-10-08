@@ -97,8 +97,9 @@ fig.tight_layout()
 # %%
 # Provenance
 # ----------
-# The graph shows the CASTEP read and mode-interpolation PythonJobs of this
-# workflow, then the nested ``ToscaFromModesWorkChain`` doing the spectrum work.
+# The graph shows the in-process CASTEP read calcfunction and
+# mode-interpolation PythonJob of this workflow, then the nested
+# ``ToscaFromModesWorkChain`` doing the spectrum work.
 
 show_provenance(node, title="TOSCA-from-force-constants workflow provenance")
 

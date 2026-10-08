@@ -5,6 +5,10 @@ in-process from a CASTEP file by the ``read_castep_force_constants``
 calcfunction, or taken from a supplied node), a single PythonJob samples a
 Monkhorst-Pack grid and computes the DOS; the euphonic ``Spectrum1D`` is
 serialized to a native ``XyData`` for easy plotting.
+
+The file-staging PythonJob pattern that the read used to demonstrate is retained
+by :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_force_constants_inputs`,
+exercised by ``tests/test_remote_ssh.py``.
 """
 
 from __future__ import annotations

@@ -20,8 +20,8 @@ code = get_python_code()
 # %%
 # Run the DOS workflow
 # --------------------
-# The workflow reads the force constants (a PythonJob), then samples a
-# Monkhorst-Pack grid and computes the DOS with adaptive broadening.
+# The workflow reads the force constants (an in-process calcfunction), then
+# samples a Monkhorst-Pack grid and computes the DOS with adaptive broadening.
 
 from aiida.plugins import WorkflowFactory
 
