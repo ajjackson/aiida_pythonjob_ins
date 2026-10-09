@@ -3,8 +3,9 @@
 > **Status: proposal only, and externally blocked.** Recorded so the
 > investigation behind it is not lost. `specs/`, `design.md` and `tasks.md` are
 > not yet written, so this change does not validate. Depends on
-> `replace-slurm-container-with-ssh`, and on a change in a *different*
-> repository — see "External blocker".
+> `replace-slurm-container-with-ssh` (landed; archived as
+> `openspec/changes/archive/2026-09-17-replace-slurm-container-with-ssh`), and
+> on a change in a *different* repository — see "External blocker".
 
 ## Why
 

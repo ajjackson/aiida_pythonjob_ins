@@ -2,8 +2,10 @@
 
 > **Status: proposal only.** Recorded so the investigation behind it is not
 > lost. `specs/`, `design.md` and `tasks.md` are not yet written, so this change
-> does not validate. Depends on `replace-slurm-container-with-ssh` landing
-> first, because the how-to includes configuration from that fixture.
+> does not validate. It depended on `replace-slurm-container-with-ssh` landing
+> first, because the how-to includes configuration from that fixture; that
+> change has landed (archived as
+> `openspec/changes/archive/2026-09-17-replace-slurm-container-with-ssh`).
 
 ## Why
 

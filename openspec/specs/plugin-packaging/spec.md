@@ -28,12 +28,13 @@ result alone does not.
 
 #### Scenario: Workflows load through the workflow factory
 
-- **WHEN** `pythonjob_ins.dispersion`, `pythonjob_ins.dos`,
-  `pythonjob_ins.tosca_from_modes` or `pythonjob_ins.tosca_from_force_constants`
-  is requested from AiiDA's workflow factory
-- **THEN** the corresponding `DispersionWorkChain`, `DosWorkChain`,
-  `ToscaFromModesWorkChain` or `ToscaFromForceConstantsWorkChain` class is
-  returned
+- **WHEN** `pythonjob_ins.force_constants`, `pythonjob_ins.dispersion`,
+  `pythonjob_ins.dos`, `pythonjob_ins.tosca_from_modes` or
+  `pythonjob_ins.tosca_from_force_constants` is requested from AiiDA's workflow
+  factory
+- **THEN** the corresponding `ForceConstantsWorkChain`, `DispersionWorkChain`,
+  `DosWorkChain`, `ToscaFromModesWorkChain` or `ToscaFromForceConstantsWorkChain`
+  class is returned
 
 #### Scenario: Every declared entry point resolves to its class
 

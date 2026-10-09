@@ -6,8 +6,9 @@ A gamma-point Euphonic `QpointPhononModes` dump for a molecular ethanol crystal
 (9 atoms: 2 C, 1 O, 6 H), used as the TOSCA tutorial's example dataset because
 TOSCA's almost-isotropic incoherent approximation is most representative for
 hydrogenous, molecular samples (see
-`openspec/changes/abinslib-workflow/design.md`, Decision 13, and
-`openspec/changes/abinslib-workflow/proposal.md` — Why).
+`openspec/changes/archive/2026-08-24-abinslib-workflow/design.md`, "13. Bundled
+sample data", and
+`openspec/changes/archive/2026-08-24-abinslib-workflow/proposal.md` — Why).
 
 - **Origin**: [`isisneutronmuon/abINS_lib`](https://github.com/isisneutronmuon/abINS_lib),
   `tests/data/ethanol_qpoint_phonon_modes.json`
