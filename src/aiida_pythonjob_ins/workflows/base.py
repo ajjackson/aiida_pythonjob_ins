@@ -46,15 +46,11 @@ def read_castep_force_constants(
     produces, and it can be cached.
 
     An unreadable or invalid file returns an ``ExitCode(300, ...)`` rather than
-    raising. Euphonic's CASTEP binary reader raises several foreseeable,
-    classifiable errors on malformed input: ``EOFError`` (empty file or
-    unexpected end-of-file), ``struct.error`` (file truncated under 4 bytes),
-    ``OSError`` (mismatched Fortran record markers), ``ValueError`` (unsupported
-    CASTEP version), and ``RuntimeError`` (valid CASTEP output lacking force
-    constants). Per AiiDA's guidance to return an ``ExitCode`` for foreseeable
-    failures, all of these are caught and reported. ``RuntimeError`` is matched by
-    message so that genuine internal bugs or unexpected environment errors
-    continue to propagate as Excepted processes.
+    raising. All foreseeable Euphonic reader failures on truncated, corrupt, or
+    non-phonon CASTEP inputs are caught per AiiDA's guidance to return an
+    ``ExitCode`` for classifiable failures. ``RuntimeError`` is matched by
+    message so that genuine internal bugs continue to propagate as Excepted
+    processes.
     """
     try:
         with castep_file.as_path() as path:
