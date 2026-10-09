@@ -90,6 +90,7 @@ doc = [
 "pythonjob_ins.qpoint_phonon_modes" = "aiida_pythonjob_ins.data.qpoint_phonon_modes:QpointPhononModesData"
 
 [project.entry-points."aiida.workflows"]
+"pythonjob_ins.force_constants" = "aiida_pythonjob_ins.workflows.force_constants:ForceConstantsWorkChain"
 "pythonjob_ins.dispersion" = "aiida_pythonjob_ins.workflows.dispersion:DispersionWorkChain"
 "pythonjob_ins.dos" = "aiida_pythonjob_ins.workflows.dos:DosWorkChain"
 "pythonjob_ins.tosca_from_modes" = "aiida_pythonjob_ins.workflows.tosca:ToscaFromModesWorkChain"

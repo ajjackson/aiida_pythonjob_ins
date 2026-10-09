@@ -7,10 +7,11 @@ cannot express honestly.
 
 * :class:`ToscaFromModesWorkChain` -- the stable core. Takes prepared phonon
   modes and nothing else as a source; independently runnable.
-* :class:`ToscaFromForceConstantsWorkChain` -- **inherits**
-  :class:`~aiida_pythonjob_ins.workflows.base.ForceConstantsWorkChain` (it
-  genuinely is a force-constants-sourced chain) while **composing**
-  :class:`ToscaFromModesWorkChain` through AiiDA's exposed-input/output
+* :class:`ToscaFromForceConstantsWorkChain` -- resolves force constants
+  by running
+  :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+  as a sub-workflow (it genuinely is a force-constants-sourced chain) while
+  **composing** :class:`ToscaFromModesWorkChain` through AiiDA's exposed-input/output
   machinery, mirroring `PwBandsWorkChain` exposing `PwBaseWorkChain`
   (https://github.com/aiidateam/aiida-quantumespresso/blob/main/src/aiida_quantumespresso/workflows/pw/bands.py).
 
@@ -30,11 +31,9 @@ one input does not invalidate the others under caching (Decision 5):
 
 from __future__ import annotations
 
-from typing import Any
-
 from aiida.common import AttributeDict
-from aiida.engine import ExitCode, ToContext, WorkChain, calcfunction
-from aiida.orm import AbstractCode, Dict, Float, List, Str, XyData, to_aiida_type
+from aiida.engine import ExitCode, ToContext, calcfunction
+from aiida.orm import Float, List, Str, XyData
 from aiida_pythonjob import PythonJob
 
 from aiida_pythonjob_ins.conversions import (
@@ -47,7 +46,10 @@ from aiida_pythonjob_ins.pythonjobs import (
     prepare_grid_interpolation_inputs,
     prepare_tosca_spectrum_inputs,
 )
-from aiida_pythonjob_ins.workflows.base import ForceConstantsWorkChain
+from aiida_pythonjob_ins.workflows.base import (
+    FromForceConstantsWorkChain,
+    JobDispatchWorkChain,
+)
 
 
 @calcfunction
@@ -73,7 +75,7 @@ def broaden_spectra(grouped: XyData, resolution_model: Str) -> XyData:
     return spectrum_collection_to_xydata(broadened)
 
 
-class ToscaFromModesWorkChain(WorkChain):
+class ToscaFromModesWorkChain(JobDispatchWorkChain):
     """Compute a TOSCA spectrum from prepared phonon modes.
 
     Takes a ``QpointPhononModesData`` node and nothing else as a source: no
@@ -151,18 +153,6 @@ class ToscaFromModesWorkChain(WorkChain):
                 "default) yields a single total spectrum."
             ),
         )
-        spec.input(
-            "code",
-            valid_type=AbstractCode,
-            help="Python code used to run the intensity PythonJob.",
-        )
-        spec.input(
-            "options",
-            valid_type=Dict,
-            required=False,
-            serializer=to_aiida_type,
-            help="Optional scheduler and execution options passed to child PythonJobs.",
-        )
         spec.outline(
             cls.compute_intensities,
             cls.group,
@@ -188,12 +178,6 @@ class ToscaFromModesWorkChain(WorkChain):
             "ERROR_SUB_PROCESS_FAILED",
             message="The intensity PythonJob did not finish successfully.",
         )
-
-    def get_job_metadata(self) -> dict[str, Any]:
-        """Return metadata dictionary for child PythonJobs."""
-        if "options" in self.inputs:
-            return {"options": self.inputs.options.get_dict()}
-        return {}
 
     def compute_intensities(self):
         """Compute the full, ungrouped line set as a PythonJob."""
@@ -230,11 +214,14 @@ class ToscaFromModesWorkChain(WorkChain):
         self.out("spectrum", self.ctx.spectrum)
 
 
-class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
+class ToscaFromForceConstantsWorkChain(
+    FromForceConstantsWorkChain, JobDispatchWorkChain
+):
     """Compute a TOSCA spectrum from force constants, via interpolated modes.
 
-    Inherits :class:`~aiida_pythonjob_ins.workflows.base.ForceConstantsWorkChain`
-    for the force-constants source (a CASTEP file, read in-process by the
+    Resolves force constants by running
+    :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+    as a sub-workflow (a CASTEP file, read in-process by the
     ``read_castep_force_constants`` calcfunction, or a prepared node -- exactly
     one, as usual), interpolates modes on a Monkhorst-Pack grid (a powder
     average, matching :class:`~aiida_pythonjob_ins.workflows.dos.DosWorkChain`
@@ -248,14 +235,15 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step of this workflow's own
           (the mode interpolation) did not finish successfully.
-        * 410 (ERROR_READ_FAILED): The force constants could not be read.
+        * 402 (ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS): The
+          ``ForceConstantsWorkChain`` sub-workflow did not finish successfully.
         * 401 (ERROR_SPECTRUM_WORKCHAIN_FAILED): The delegated
           ``ToscaFromModesWorkChain`` did not finish successfully.
     """
 
     @classmethod
     def define(cls, spec) -> None:
-        super().define(spec)  # castep_file / force_constants / code + validator
+        super().define(spec)  # force_constants namespace + code/options + exit codes
         spec.input(
             "q_spacing",
             valid_type=Float,
@@ -273,13 +261,14 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
                 "help": (
                     "Scientific and instrument inputs forwarded to the composed "
                     "ToscaFromModesWorkChain (modes and code excluded: modes is "
-                    "produced internally, and code is shared with the "
-                    "force-constants step above)."
+                    "produced internally, and code is provided at the top level "
+                    "for this workflow's own mode-interpolation step)."
                 )
             },
         )
         spec.outline(
-            cls.resolve_force_constants,
+            cls.run_force_constants,
+            cls.inspect_force_constants,
             cls.interpolate_modes,
             cls.compute_spectrum,
             cls.finalize,

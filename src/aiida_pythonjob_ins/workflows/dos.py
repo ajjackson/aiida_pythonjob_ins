@@ -1,10 +1,12 @@
 """A WorkChain computing a phonon density of states.
 
-After :class:`ForceConstantsWorkChain` resolves the force constants (read
-in-process from a CASTEP file by the ``read_castep_force_constants``
-calcfunction, or taken from a supplied node), a single PythonJob samples a
-Monkhorst-Pack grid and computes the DOS; the euphonic ``Spectrum1D`` is
-serialized to a native ``XyData`` for easy plotting.
+After
+:class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+resolves the force constants (read in-process from a CASTEP file by the
+``read_castep_force_constants`` calcfunction, or taken from a supplied node) as a
+sub-workflow, a single PythonJob samples a Monkhorst-Pack grid and computes the
+DOS; the euphonic ``Spectrum1D`` is serialized to a native ``XyData`` for easy
+plotting.
 
 The file-staging PythonJob pattern that the read used to demonstrate is retained
 by :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_force_constants_inputs`,
@@ -18,20 +20,30 @@ from aiida.orm import Float, XyData
 from aiida_pythonjob import PythonJob
 
 from aiida_pythonjob_ins.pythonjobs import prepare_dos_inputs
-from aiida_pythonjob_ins.workflows.base import ForceConstantsWorkChain
+from aiida_pythonjob_ins.workflows.base import (
+    FromForceConstantsWorkChain,
+    JobDispatchWorkChain,
+)
 
 
-class DosWorkChain(ForceConstantsWorkChain):
+class DosWorkChain(FromForceConstantsWorkChain, JobDispatchWorkChain):
     """Compute a phonon DOS from a CASTEP file or a ForceConstantsData node.
 
+    The force-constants source is resolved by running
+    :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+    as a sub-workflow (see the ``force_constants`` input namespace), then a single
+    PythonJob samples a Monkhorst-Pack grid and computes the DOS.
+
     Exit Codes:
-        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
-        * 410 (ERROR_READ_FAILED): The force constants could not be read.
+        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step of this workflow did
+          not finish successfully.
+        * 402 (ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS): The
+          ``ForceConstantsWorkChain`` sub-workflow did not finish successfully.
     """
 
     @classmethod
     def define(cls, spec) -> None:
-        super().define(spec)  # castep_file / force_constants / code + validator
+        super().define(spec)  # force_constants namespace + code/options + exit codes
         spec.input(
             "q_spacing",
             valid_type=Float,
@@ -45,7 +57,8 @@ class DosWorkChain(ForceConstantsWorkChain):
             help="DOS energy bin width, in meV.",
         )
         spec.outline(
-            cls.resolve_force_constants,
+            cls.run_force_constants,
+            cls.inspect_force_constants,
             cls.compute_dos,
             cls.finalize,
         )

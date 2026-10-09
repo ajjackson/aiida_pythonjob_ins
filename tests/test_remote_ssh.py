@@ -113,7 +113,7 @@ def test_dos_workchain_remote_ssh(remote_python_code, quartz_castep_bin):
 
     results, node = run_get_node(
         DosWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(0.5),  # coarse grid for speed
         energy_spacing=Float(2.0),
         code=remote_python_code,

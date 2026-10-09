@@ -88,8 +88,9 @@ uv run pytest -n 0
 - **Input formats**: read force constants from CASTEP (`.castep_bin`) or from
   Phonopy output (`phonopy.yaml` + `FORCE_CONSTANTS` [+ `BORN`]); read phonon
   modes from a Euphonic `QpointPhononModes` JSON dump.
-- **Workflows** starting from force constants (each accepts a `castep_file` *or*
-  a pre-built `force_constants` node, so they work equally from CASTEP or
+- **Workflows** starting from force constants (each accepts a CASTEP
+  `castep_file` *or* a pre-built `force_constants` node, grouped under a
+  `force_constants` input namespace, so they work equally from CASTEP or
   Phonopy input):
   - `DispersionWorkChain` chains an in-process read `calcfunction` (when starting
     from a CASTEP file) with three other `calcfunction`s (extract structure, build
@@ -125,7 +126,9 @@ code = orm.load_code("python3@localhost")
 
 results, node = run_get_node(
     DispersionWorkChain,
-    castep_file=orm.SinglefileData("quartz.castep_bin"),
+    force_constants={
+        "castep_file": orm.SinglefileData("quartz.castep_bin"),
+    },
     q_spacing=orm.Float(0.025),
     code=code,
 )

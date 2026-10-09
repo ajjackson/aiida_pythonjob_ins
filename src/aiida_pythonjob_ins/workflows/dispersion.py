@@ -1,8 +1,9 @@
 """A WorkChain composing Euphonic steps into a dispersion workflow.
 
-Steps (after force constants are resolved by :class:`ForceConstantsWorkChain` --
-read in-process from a CASTEP file by the ``read_castep_force_constants``
-calcfunction, or taken from a supplied node):
+Steps (after force constants are resolved by running
+:class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+as a sub-workflow -- read in-process from a CASTEP file by the
+``read_castep_force_constants`` calcfunction, or taken from a supplied node):
 
 1. extract the crystal structure            -> StructureData       (calcfunction)
 2. generate a seekpath q-point path          -> KpointsData         (calcfunction)
@@ -38,7 +39,10 @@ from aiida_pythonjob_ins.data import QpointPhononModesData
 from aiida_pythonjob_ins.data.mixins import SupportsToStructure
 from aiida_pythonjob_ins.operations import band_path_qpoints
 from aiida_pythonjob_ins.pythonjobs import prepare_interpolation_inputs
-from aiida_pythonjob_ins.workflows.base import ForceConstantsWorkChain
+from aiida_pythonjob_ins.workflows.base import (
+    FromForceConstantsWorkChain,
+    JobDispatchWorkChain,
+)
 
 
 @calcfunction
@@ -80,17 +84,24 @@ def assemble_bands(modes: QpointPhononModesData, qpoints: KpointsData) -> BandsD
     return modes.to_bands(qpoints)
 
 
-class DispersionWorkChain(ForceConstantsWorkChain):
+class DispersionWorkChain(FromForceConstantsWorkChain, JobDispatchWorkChain):
     """Compute phonon dispersion from a CASTEP file or a ForceConstantsData node.
 
+    The force-constants source is resolved by running
+    :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+    as a sub-workflow (see the ``force_constants`` input namespace), then a band
+    path is built, modes are interpolated on it, and a ``BandsData`` is composed.
+
     Exit Codes:
-        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
-        * 410 (ERROR_READ_FAILED): The force constants could not be read.
+        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step of this workflow did
+          not finish successfully.
+        * 402 (ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS): The
+          ``ForceConstantsWorkChain`` sub-workflow did not finish successfully.
     """
 
     @classmethod
     def define(cls, spec) -> None:
-        super().define(spec)  # castep_file / force_constants / code + validator
+        super().define(spec)  # force_constants namespace + code/options + exit codes
         spec.input(
             "q_spacing",
             valid_type=Float,
@@ -98,7 +109,8 @@ class DispersionWorkChain(ForceConstantsWorkChain):
             help="Target q-point spacing along the band path, in 1/Angstrom.",
         )
         spec.outline(
-            cls.resolve_force_constants,
+            cls.run_force_constants,
+            cls.inspect_force_constants,
             cls.generate_path,
             cls.interpolate,
             cls.finalize,
