@@ -285,7 +285,8 @@ dedicated failure exit code rather than proceeding with missing results.
 #### Scenario: Force constants cannot be read
 
 - **WHEN** a workflow is launched with a file that cannot be read as CASTEP force
-  constants
+  constants, including truncated binary data, corrupt record markers, unsupported
+  CASTEP versions, or calculation outputs lacking force constants
 - **THEN** the workflow terminates with an exit code dedicated to failing to
   obtain force constants, distinct from exit code 400, reporting why
 - **AND** no downstream outputs are emitted
