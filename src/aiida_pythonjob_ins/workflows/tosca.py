@@ -33,7 +33,7 @@ from __future__ import annotations
 from typing import Any
 
 from aiida.common import AttributeDict
-from aiida.engine import ToContext, WorkChain, calcfunction
+from aiida.engine import ExitCode, ToContext, WorkChain, calcfunction
 from aiida.orm import AbstractCode, Dict, Float, List, Str, XyData, to_aiida_type
 from aiida_pythonjob import PythonJob
 
@@ -224,7 +224,7 @@ class ToscaFromModesWorkChain(WorkChain):
             self.ctx.grouped, self.inputs.resolution_model
         )
 
-    def finalize(self):
+    def finalize(self) -> ExitCode | None:
         """Expose the ungrouped components and the grouped, broadened spectrum."""
         self.out("components", self.ctx.components)
         self.out("spectrum", self.ctx.spectrum)
@@ -303,7 +303,7 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
         )
         return ToContext(modes=self.submit(PythonJob, **inputs))
 
-    def compute_spectrum(self):
+    def compute_spectrum(self) -> ToContext | ExitCode | None:
         """Delegate the spectrum calculation to ToscaFromModesWorkChain."""
         if not self.ctx.modes.is_finished_ok:
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED
@@ -319,7 +319,7 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
             spectrum_workchain=self.submit(ToscaFromModesWorkChain, **inputs)
         )
 
-    def finalize(self):
+    def finalize(self) -> ExitCode | None:
         """Expose the delegated workchain's outputs as this chain's own."""
         workchain = self.ctx.spectrum_workchain
         if not workchain.is_finished_ok:

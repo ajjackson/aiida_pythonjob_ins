@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The `read_castep_force_constants` calcfunction now catches all foreseeable
+  Euphonic reader errors -- `EOFError`, `struct.error` (truncated files under 4
+  bytes), `OSError` (mismatched Fortran record markers), `ValueError`
+  (unsupported CASTEP versions), and `RuntimeError` (valid CASTEP output lacking
+  force constants) -- returning `ExitCode(300, ...)` instead of excepting.
+  Unrelated `RuntimeError`s continue to propagate as Excepted processes.
+- Return type annotations added to `read_castep_force_constants` (`ForceConstantsData
+  | ExitCode`) and to WorkChain outline step methods (`ExitCode | None`,
+  `ToContext | ExitCode | None`) that can return failure exit codes.
 - **BREAKING**: A failed force-constants read now exits with `410 ERROR_READ_FAILED`
   instead of `400 ERROR_SUB_PROCESS_FAILED`. Exit code `400` now means only that a
   `PythonJob` step did not finish successfully.

@@ -26,7 +26,7 @@ https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/workflows/writ
 
 from __future__ import annotations
 
-from aiida.engine import ToContext, calcfunction
+from aiida.engine import ExitCode, ToContext, calcfunction
 from aiida.orm import BandsData, Float, KpointsData, StructureData
 from aiida_pythonjob import PythonJob
 
@@ -146,7 +146,7 @@ class DispersionWorkChain(ForceConstantsWorkChain):
         )
         return ToContext(modes=self.submit(PythonJob, **inputs))
 
-    def finalize(self):
+    def finalize(self) -> ExitCode | None:
         """Expose the modes, path and a composed BandsData."""
         if not self.ctx.modes.is_finished_ok:
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED

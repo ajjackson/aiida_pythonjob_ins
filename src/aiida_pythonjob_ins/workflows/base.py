@@ -25,6 +25,7 @@ needs several files, so it is cleaner to read it up front into a
 
 from __future__ import annotations
 
+import struct
 from typing import Any
 
 from aiida.engine import ExitCode, WorkChain, calcfunction
@@ -34,7 +35,9 @@ from aiida_pythonjob_ins.data import ForceConstantsData
 
 
 @calcfunction
-def read_castep_force_constants(castep_file: SinglefileData) -> ForceConstantsData:
+def read_castep_force_constants(
+    castep_file: SinglefileData,
+) -> ForceConstantsData | ExitCode:
     """Read a CASTEP ``SinglefileData`` into a :class:`ForceConstantsData` in-process.
 
     A calcfunction (not a dispatched PythonJob): the read takes about 0.1 s, so the
@@ -42,18 +45,27 @@ def read_castep_force_constants(castep_file: SinglefileData) -> ForceConstantsDa
     ``CalcFunctionNode`` linking the file to the ``ForceConstantsData`` it
     produces, and it can be cached.
 
-    An unreadable file returns an ``ExitCode`` rather than raising. Spike task 1.1
-    determined that Euphonic's reader raises ``EOFError`` on junk bytes, a
-    truncated ``.castep_bin`` and an empty file -- all three yield ``Issue reading
-    binary file ... Unexpected EOF reached``. Only that foreseeable, classifiable
-    failure is caught (per AiiDA's guidance to return an ``ExitCode`` for such
-    cases); any other exception propagates as an Excepted process.
+    An unreadable or invalid file returns an ``ExitCode(300, ...)`` rather than
+    raising. Euphonic's CASTEP binary reader raises several foreseeable,
+    classifiable errors on malformed input: ``EOFError`` (empty file or
+    unexpected end-of-file), ``struct.error`` (file truncated under 4 bytes),
+    ``OSError`` (mismatched Fortran record markers), ``ValueError`` (unsupported
+    CASTEP version), and ``RuntimeError`` (valid CASTEP output lacking force
+    constants). Per AiiDA's guidance to return an ``ExitCode`` for foreseeable
+    failures, all of these are caught and reported. ``RuntimeError`` is matched by
+    message so that genuine internal bugs or unexpected environment errors
+    continue to propagate as Excepted processes.
     """
     try:
         with castep_file.as_path() as path:
             return ForceConstantsData.from_castep(path)
-    except EOFError as exc:
+    except (EOFError, struct.error, OSError, ValueError) as exc:
         return ExitCode(300, f"Could not read CASTEP force constants: {exc}")
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "Force constants matrix could not be found" in msg or "Invalid file" in msg:
+            return ExitCode(300, f"Could not read CASTEP force constants: {exc}")
+        raise
 
 
 class ForceConstantsWorkChain(WorkChain):
@@ -121,7 +133,7 @@ class ForceConstantsWorkChain(WorkChain):
             return {"options": self.inputs.options.get_dict()}
         return {}
 
-    def resolve_force_constants(self):
+    def resolve_force_constants(self) -> ExitCode | None:
         """Set ``self.ctx.force_constants`` from the supplied node or the read step.
 
         A single outline step replacing the former

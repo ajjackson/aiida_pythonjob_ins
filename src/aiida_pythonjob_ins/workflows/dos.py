@@ -13,7 +13,7 @@ exercised by ``tests/test_remote_ssh.py``.
 
 from __future__ import annotations
 
-from aiida.engine import ToContext
+from aiida.engine import ExitCode, ToContext
 from aiida.orm import Float, XyData
 from aiida_pythonjob import PythonJob
 
@@ -66,7 +66,7 @@ class DosWorkChain(ForceConstantsWorkChain):
         )
         return ToContext(dos=self.submit(PythonJob, **inputs))
 
-    def finalize(self):
+    def finalize(self) -> ExitCode | None:
         """Expose the DOS XyData."""
         if not self.ctx.dos.is_finished_ok:
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED
