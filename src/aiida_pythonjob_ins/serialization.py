@@ -35,10 +35,11 @@ def _serializer_key(cls: type) -> str:
     ``f"{type(obj).__module__}.{type(obj).__name__}"``. Deriving the key from the
     imported class itself, rather than writing the string by hand, means the key
     follows the class if it is relocated upstream (as ``Spectrum1DCollection`` is
-    relative to ``Spectrum1D`` -- see Decision 10 in
-    openspec/changes/abinslib-workflow/design.md). A stale hand-written key would
-    not raise: the lookup would simply miss and silently fall through to a
-    generic ``JsonableData``/``PickledData`` fallback.
+    relative to ``Spectrum1D`` -- see
+    openspec/changes/archive/2026-08-24-abinslib-workflow/design.md,
+    "10. Serializer keys are derived from the classes, not hand-written"). A
+    stale hand-written key would not raise: the lookup would simply miss and
+    silently fall through to a generic ``JsonableData``/``PickledData`` fallback.
     """
     return f"{cls.__module__}.{cls.__name__}"
 

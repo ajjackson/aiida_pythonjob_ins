@@ -1,9 +1,8 @@
 """WorkChains composing the TOSCA scattering-intensity operations.
 
-Two chains, split by input rather than combined into one with an either/or port
-(see `proposal.md` and Decision 1 in `design.md`): a required parameter for one
-input (`q_spacing`) would be meaningless for the other, which a flat process spec
-cannot express honestly.
+Two chains, split by input rather than combined into one with an either/or port:
+a required parameter for one input (`q_spacing`) would be meaningless for the
+other, which a flat process spec cannot express honestly.
 
 * :class:`ToscaFromModesWorkChain` -- the stable core. Takes prepared phonon
   modes and nothing else as a source; independently runnable.
@@ -16,15 +15,15 @@ cannot express honestly.
   (https://github.com/aiidateam/aiida-quantumespresso/blob/main/src/aiida_quantumespresso/workflows/pw/bands.py).
 
 `ToscaFromModesWorkChain` runs three provenance steps, split so that a change to
-one input does not invalidate the others under caching (Decision 5):
+one input does not invalidate the others under caching:
 
 1. ``compute_intensities`` -- a PythonJob computing the full, ungrouped line set
    (every atom x quantum-order x detector-angle component). Expensive; the step
    this design exists to make reusable.
 2. ``group_spectra`` -- a cheap ``calcfunction`` grouping/summing that line set by
-   caller-supplied metadata keys (Decision 6).
+   caller-supplied metadata keys.
 3. ``broaden_spectra`` -- a cheap ``calcfunction`` applying TOSCA's resolution
-   broadening to the grouped result (Decision 9). Broadening after grouping is
+   broadening to the grouped result. Broadening after grouping is
    exact, not approximate: the resolution operator is linear, so
    ``broaden(sum(y)) == sum(broaden(y))``.
 """
@@ -60,7 +59,7 @@ def group_spectra(components: XyData, group_by: List) -> XyData:
     already returns a one-line ``Spectrum1DCollection`` (unlike ``sum()``, which
     returns a bare ``Spectrum1D``), so routing both cases through ``group_by``
     keeps this function's return type -- and therefore the conversion back to
-    ``XyData`` -- uniform (Decision 6).
+    ``XyData`` -- uniform.
     """
     collection = xydata_to_spectrum_collection(components)
     grouped = collection.group_by(*group_by.get_list())
@@ -81,8 +80,8 @@ class ToscaFromModesWorkChain(JobDispatchWorkChain):
     Takes a ``QpointPhononModesData`` node and nothing else as a source: no
     file-reading step is offered, so this chain carries no q-point sampling
     parameter (that belongs to :class:`ToscaFromForceConstantsWorkChain`, which
-    composes this one). See Decision 2 in `design.md` for why the core requires
-    a node rather than a file path.
+    composes this one). The node-taking chain is the stable centre; any
+    file-ingesting convenience composes around it rather than altering the core.
 
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): The intensity PythonJob did not finish
@@ -230,15 +229,15 @@ class ToscaFromForceConstantsWorkChain(
     almost-isotropic incoherent approximation needs a representative *density*
     of modes, not specific q-point positions), and delegates the spectrum
     calculation to :class:`ToscaFromModesWorkChain` rather than reimplementing
-    it (Decision 1).
+    it, so the intensity calculation stays reusable.
 
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step of this workflow's own
           (the mode interpolation) did not finish successfully.
-        * 402 (ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS): The
-          ``ForceConstantsWorkChain`` sub-workflow did not finish successfully.
         * 401 (ERROR_SPECTRUM_WORKCHAIN_FAILED): The delegated
           ``ToscaFromModesWorkChain`` did not finish successfully.
+        * 402 (ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS): The
+          ``ForceConstantsWorkChain`` sub-workflow did not finish successfully.
     """
 
     @classmethod

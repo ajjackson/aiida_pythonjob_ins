@@ -9,7 +9,8 @@ inherits only what it needs:
 * :class:`FromForceConstantsWorkChain` -- obtaining force constants by running
   :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
   as a sub-workflow, exposing its inputs under a ``force_constants`` namespace
-  (Decision 1) and reporting its failure with ``402
+  (so its "exactly one" validator lives in the namespace and cannot collide
+  with a parent's own validator) and reporting its failure with ``402
   ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS``.
 
 Each base subclasses ``WorkChain`` directly (rather than being a plain mixin) so
@@ -75,9 +76,10 @@ class FromForceConstantsWorkChain(WorkChain):
     Exposes the inputs of
     :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
     under a required ``force_constants`` namespace and runs that workchain as a
-    child to resolve ``self.ctx.force_constants`` (Decision 3: always delegate,
-    for both source kinds). Consumers start their outline with
-    ``cls.run_force_constants, cls.inspect_force_constants``.
+    child to resolve ``self.ctx.force_constants``, always delegating to the
+    child (even for a prepared node, which is passed through) so every run has
+    exactly one ``ForceConstantsWorkChain`` in the provenance graph. Consumers
+    start their outline with ``cls.run_force_constants, cls.inspect_force_constants``.
 
     Exit Codes:
         * 402 (ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS): The

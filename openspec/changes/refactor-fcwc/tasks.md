@@ -39,6 +39,25 @@ Prerequisite: `migrate-castep-reader-to-calcfunction` is completed and archived,
 - [x] 4.1 Add **BREAKING** entries to `CHANGELOG.md` (Unreleased): the namespace input rename with a before/after example, the new 402 exit code, and the class-hierarchy change. Verify the entries against the proposal's What Changes.
 - [x] 4.2 Run `uv run ruff check`, `uv run ruff format --check` and `uv run pytest -m "not containerized"`; all pass.
 
+## 5. Review follow-up
+
+- [x] 5.1 Rewrite the `CHANGELOG.md` `Unreleased` section to list net changes since 0.1.0 instead of the history of the two unreleased changes. Remove the stale "400 → 410" entry for the consuming workflows. Correct the `node` wording in `README.md` (workflow list, now including `ForceConstantsWorkChain`) and in the `plot_phonopy_bands_and_dos.py` docstring.
+- [x] 5.2 Remove design-decision numbers ("Decision N", "see `design.md`") from public docstrings in `src/` (currently `workflows/base.py`, `workflows/tosca.py` and `serialization.py`). Wherever a short clause can state the reason, write that instead. If stating it would be unreasonably long, keep a reference, but make it resolvable: give the archived path and decision title, e.g. `openspec/changes/archive/2026-08-24-abinslib-workflow/design.md` ("2. ..."). The existing paths `openspec/changes/abinslib-workflow/...` no longer exist; that also applies to the code comment in `operations.py`. Verify with `grep -rn "Decision\|design\.md\|proposal\.md" src/`: every remaining hit is a resolvable archived path, and `uv run ruff check` passes.
+- [x] 5.3 In `tests/test_force_constants_workchain.py::test_castep_file_gives_equivalent_force_constants`, replace the shape and atom-count checks with array comparisons against `ForceConstants.from_castep` on the same file, using `np.testing.assert_allclose` on `force_constants`, `crystal.cell_vectors` and `crystal.atom_r`, as in `tests/test_workflows.py::test_read_castep_force_constants_valid`. Verify that `uv run pytest tests/test_force_constants_workchain.py` passes.
+- [x] 5.4 Add a spec-only test to `tests/test_base_workchains.py` asserting that `ToscaFromModesWorkChain.exit_codes.ERROR_SUB_PROCESS_FAILED` has status 400 and the message "The intensity PythonJob did not finish successfully.", which differs from `JobDispatchWorkChain`'s generic message. Verify that `uv run pytest tests/test_base_workchains.py` passes.
+- [x] 5.5 Build the docs from clean, with warnings as errors:
+
+  ```bash
+  rm -rf docs/source/auto_examples docs/source/autoapi docs/build
+  uv run --group doc make -C docs html SPHINXOPTS="-W --keep-going"
+  ```
+
+  Removing `docs/source/auto_examples` matters: it is a gitignored cache, and Sphinx-Gallery skips any example whose checksum matches it. Requires the system `dot` (graphviz). Verify that:
+  - the build succeeds;
+  - the log reports "executed 5 out of 5 files";
+  - `docs/build/html/workflows.html` shows `ForceConstantsWorkChain` with inputs `castep_file` and `node`, output `force_constants`, its outline and exit code 410;
+  - each force-constants consumer shows a `force_constants` namespace and exit code 402.
+
 ## Workflow follow-up
 
 - The maintainer runs the containerized tests before merge.

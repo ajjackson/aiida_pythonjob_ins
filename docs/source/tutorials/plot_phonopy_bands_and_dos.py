@@ -4,9 +4,9 @@
 Read force constants from **Phonopy** output (NaCl: ``phonopy.yaml`` +
 ``FORCE_CONSTANTS`` + ``BORN``) as a ``PythonJob``, then reuse the *same*
 :class:`~aiida_pythonjob_ins.workflows.DispersionWorkChain` and
-:class:`~aiida_pythonjob_ins.workflows.DosWorkChain` -- they accept a
-``force_constants`` node (under the ``force_constants`` namespace), so nothing
-about them is CASTEP-specific.
+:class:`~aiida_pythonjob_ins.workflows.DosWorkChain` -- they accept a prepared
+``ForceConstantsData`` as ``force_constants={"node": ...}``, so nothing about
+them is CASTEP-specific.
 """
 
 # %%
