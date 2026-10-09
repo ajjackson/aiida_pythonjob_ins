@@ -1,10 +1,13 @@
 """Shared base WorkChain that obtains force constants for a phonon calculation.
 
-The concrete workflows (dispersion, DOS) all need a ``ForceConstantsData`` to work
-from. This base lets that come from *either*:
+The concrete workflows (dispersion, DOS, TOSCA) all need a ``ForceConstantsData`` to
+work from. This base lets that come from *either*:
 
-* a CASTEP ``castep_file`` (``SinglefileData``) -- read in-workflow by a PythonJob
-  (demonstrating file staging), or
+* a CASTEP ``castep_file`` (``SinglefileData``) -- read in-process by the
+  :func:`read_castep_force_constants` calcfunction (provenance-recorded, but not
+  dispatched; the file-staging PythonJob pattern is still demonstrated by
+  :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_force_constants_inputs`,
+  exercised by ``tests/test_remote_ssh.py``), or
 * a pre-built ``force_constants`` (``ForceConstantsData``) node -- e.g. produced
   from Phonopy input (see
   :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_phonopy_inputs`) or any other
@@ -12,8 +15,7 @@ from. This base lets that come from *either*:
 
 Subclasses add their own inputs/outputs and an outline that begins with::
 
-    if_(cls.should_read_castep)(cls.read_force_constants),
-    cls.assign_force_constants,
+    cls.resolve_force_constants,
     ...  # their compute steps, using ``self.ctx.force_constants``
 
 Reading Phonopy inside the workflow is intentionally *not* built in here: Phonopy
@@ -23,14 +25,43 @@ needs several files, so it is cleaner to read it up front into a
 
 from __future__ import annotations
 
+import struct
 from typing import Any
 
-from aiida.engine import ToContext, WorkChain
+from aiida.engine import ExitCode, WorkChain, calcfunction
 from aiida.orm import AbstractCode, Dict, SinglefileData, to_aiida_type
-from aiida_pythonjob import PythonJob
 
 from aiida_pythonjob_ins.data import ForceConstantsData
-from aiida_pythonjob_ins.pythonjobs import prepare_read_force_constants_inputs
+
+
+@calcfunction
+def read_castep_force_constants(
+    castep_file: SinglefileData,
+) -> ForceConstantsData | ExitCode:
+    """Read a CASTEP ``SinglefileData`` into a :class:`ForceConstantsData` in-process.
+
+    A calcfunction (not a dispatched PythonJob): the read takes about 0.1 s, so the
+    ~2.8 s of job machinery it used to incur is unjustified. It records a
+    ``CalcFunctionNode`` linking the file to the ``ForceConstantsData`` it
+    produces, and it can be cached.
+
+    An unreadable or invalid file returns an ``ExitCode(300, ...)`` rather than
+    raising. All foreseeable Euphonic reader failures on truncated, corrupt, or
+    non-phonon CASTEP inputs are caught per AiiDA's guidance to return an
+    ``ExitCode`` for classifiable failures. ``RuntimeError`` is matched by
+    message so that genuine internal bugs continue to propagate as Excepted
+    processes.
+    """
+    try:
+        with castep_file.as_path() as path:
+            return ForceConstantsData.from_castep(path)
+    except (EOFError, struct.error, OSError, ValueError) as exc:
+        return ExitCode(300, f"Could not read CASTEP force constants: {exc}")
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "Force constants matrix could not be found" in msg or "Invalid file" in msg:
+            return ExitCode(300, f"Could not read CASTEP force constants: {exc}")
+        raise
 
 
 class ForceConstantsWorkChain(WorkChain):
@@ -38,6 +69,7 @@ class ForceConstantsWorkChain(WorkChain):
 
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
+        * 410 (ERROR_READ_FAILED): The force constants could not be read.
     """
 
     @classmethod
@@ -47,7 +79,10 @@ class ForceConstantsWorkChain(WorkChain):
             "castep_file",
             valid_type=SinglefileData,
             required=False,
-            help="CASTEP .castep_bin/.check file (read in-workflow via a PythonJob).",
+            help=(
+                "CASTEP .castep_bin/.check file, read in-process by the "
+                "``read_castep_force_constants`` calcfunction."
+            ),
         )
         spec.input(
             "force_constants",
@@ -73,6 +108,11 @@ class ForceConstantsWorkChain(WorkChain):
             "ERROR_SUB_PROCESS_FAILED",
             message="A PythonJob step did not finish successfully.",
         )
+        spec.exit_code(
+            410,
+            "ERROR_READ_FAILED",
+            message="The force constants could not be read.",
+        )
 
     @staticmethod
     def _validate_source(inputs, _port) -> str | None:
@@ -89,25 +129,26 @@ class ForceConstantsWorkChain(WorkChain):
             return {"options": self.inputs.options.get_dict()}
         return {}
 
-    def should_read_castep(self) -> bool:
-        """Outline predicate: read a CASTEP file only if no node was supplied."""
-        return "force_constants" not in self.inputs
+    def resolve_force_constants(self) -> ExitCode | None:
+        """Set ``self.ctx.force_constants`` from the supplied node or the read step.
 
-    def read_force_constants(self):
-        """Read force constants from the CASTEP file via a PythonJob."""
-        inputs = prepare_read_force_constants_inputs(
-            self.inputs.castep_file,
-            code=self.inputs.code,
-            metadata=self.get_job_metadata(),
-        )
-        return ToContext(read=self.submit(PythonJob, **inputs))
+        A single outline step replacing the former
+        ``if_(cls.should_read_castep)(cls.read_force_constants),
+        cls.assign_force_constants`` pair. Calcfunctions run synchronously, so the
+        split that existed only to wait on a submitted job is no longer needed.
 
-    def assign_force_constants(self):
-        """Set ``self.ctx.force_constants`` from the input node or the read step."""
+        If a ``force_constants`` node was supplied, it is used directly. Otherwise
+        the in-process :func:`read_castep_force_constants` calcfunction reads the
+        ``castep_file``; a failed read terminates the workflow with
+        ``ERROR_READ_FAILED`` (410) rather than proceeding with missing data.
+        """
         if "force_constants" in self.inputs:
             self.ctx.force_constants = self.inputs.force_constants
-        elif self.ctx.read.is_finished_ok:
-            self.ctx.force_constants = self.ctx.read.outputs.result
-        else:
-            return self.exit_codes.ERROR_SUB_PROCESS_FAILED
-        return None
+            return None
+
+        result, node = read_castep_force_constants.run_get_node(self.inputs.castep_file)
+        if node.is_finished_ok:
+            self.ctx.force_constants = result
+            return None
+        self.report(node.exit_message)
+        return self.exit_codes.ERROR_READ_FAILED

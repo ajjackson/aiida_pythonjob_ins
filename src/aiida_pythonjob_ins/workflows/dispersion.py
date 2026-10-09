@@ -1,7 +1,8 @@
 """A WorkChain composing Euphonic steps into a dispersion workflow.
 
 Steps (after force constants are resolved by :class:`ForceConstantsWorkChain` --
-read from a CASTEP file via a PythonJob, or taken from a supplied node):
+read in-process from a CASTEP file by the ``read_castep_force_constants``
+calcfunction, or taken from a supplied node):
 
 1. extract the crystal structure            -> StructureData       (calcfunction)
 2. generate a seekpath q-point path          -> KpointsData         (calcfunction)
@@ -15,13 +16,17 @@ parent-side lets it return a native ``KpointsData`` directly -- no custom carrie
 type needed. ``BandsData`` plugs into AiiDA's plotting, e.g.
 ``results['band_structure'].show_mpl()``.
 
+The file-staging PythonJob pattern that the read used to demonstrate is retained
+by :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_force_constants_inputs`,
+exercised by ``tests/test_remote_ssh.py``.
+
 WorkChain reference:
 https://aiida.readthedocs.io/projects/aiida-core/en/stable/topics/workflows/write.html
 """
 
 from __future__ import annotations
 
-from aiida.engine import ToContext, calcfunction, if_
+from aiida.engine import ExitCode, ToContext, calcfunction
 from aiida.orm import BandsData, Float, KpointsData, StructureData
 from aiida_pythonjob import PythonJob
 
@@ -80,6 +85,7 @@ class DispersionWorkChain(ForceConstantsWorkChain):
 
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
+        * 410 (ERROR_READ_FAILED): The force constants could not be read.
     """
 
     @classmethod
@@ -92,8 +98,7 @@ class DispersionWorkChain(ForceConstantsWorkChain):
             help="Target q-point spacing along the band path, in 1/Angstrom.",
         )
         spec.outline(
-            if_(cls.should_read_castep)(cls.read_force_constants),
-            cls.assign_force_constants,
+            cls.resolve_force_constants,
             cls.generate_path,
             cls.interpolate,
             cls.finalize,
@@ -141,7 +146,7 @@ class DispersionWorkChain(ForceConstantsWorkChain):
         )
         return ToContext(modes=self.submit(PythonJob, **inputs))
 
-    def finalize(self):
+    def finalize(self) -> ExitCode | None:
         """Expose the modes, path and a composed BandsData."""
         if not self.ctx.modes.is_finished_ok:
             return self.exit_codes.ERROR_SUB_PROCESS_FAILED

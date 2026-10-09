@@ -91,9 +91,10 @@ uv run pytest -n 0
 - **Workflows** starting from force constants (each accepts a `castep_file` *or*
   a pre-built `force_constants` node, so they work equally from CASTEP or
   Phonopy input):
-  - `DispersionWorkChain` chains a read PythonJob with three `calcfunction`s
-    (extract structure, build q-point path, compose `BandsData`) and an
-    interpolation PythonJob, with full provenance.
+  - `DispersionWorkChain` chains an in-process read `calcfunction` (when starting
+    from a CASTEP file) with three other `calcfunction`s (extract structure, build
+    q-point path, compose `BandsData`) and an interpolation `PythonJob`, with
+    full provenance.
   - `DosWorkChain` computes a phonon density of states (Monkhorst-Pack sampling +
     adaptive broadening) as a native `XyData`.
   - `ToscaFromForceConstantsWorkChain` samples modes across the Brillouin zone

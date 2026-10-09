@@ -111,22 +111,25 @@ describing scheduler and execution options, such as resources, wallclock limits,
 and SHALL forward these options to every dispatched job step. When `options` is not supplied,
 the default execution options of the underlying job step SHALL apply.
 
-The division of work between steps is an implementation concern and is not fixed
-here; what is required is that heavy work is dispatchable, that no redundant work
-is performed, and that the result is fully provenance-linked.
-
-Steps that are cheap by comparison — such as regrouping or broadening an
-already-computed spectrum — need not be dispatched, but SHALL still be recorded as
-their own steps in the provenance graph so that they can be repeated
-independently of the heavy work.
+Reading force constants from a file, and regrouping or broadening an
+already-computed spectrum, are cheap by comparison. They SHALL NOT be dispatched
+through the `Code`, and SHALL each be recorded as their own step in the provenance
+graph so that they can be repeated independently of the heavy work.
 
 #### Scenario: Heavy steps run through the supplied code
 
 - **WHEN** a workflow runs
-- **THEN** force-constants reading, mode interpolation, density-of-states sampling
-  and scattering-intensity calculation each execute through the supplied code
-  rather than in the caller's process
+- **THEN** mode interpolation, density-of-states sampling and
+  scattering-intensity calculation each execute through the supplied code rather
+  than in the caller's process
 - **AND** each appears as a calculation in the workflow's provenance graph
+
+#### Scenario: Reading force constants is recorded but not dispatched
+
+- **WHEN** a workflow runs from a CASTEP `SinglefileData`
+- **THEN** reading the force constants does not execute through the supplied code
+- **AND** it appears as its own calculation in the provenance graph, linking the
+  `SinglefileData` to the `ForceConstantsData` it produces
 
 #### Scenario: Caller supplies scheduler options to the workflow
 
@@ -269,7 +272,7 @@ workflow.
 
 ### Requirement: A failed step terminates the workflow with a distinct exit code
 
-If a job step does not finish successfully, the workflow SHALL stop and return a
+If a step does not finish successfully, the workflow SHALL stop and return a
 dedicated failure exit code rather than proceeding with missing results.
 
 #### Scenario: A job step fails
@@ -279,3 +282,11 @@ dedicated failure exit code rather than proceeding with missing results.
   did not finish successfully
 - **AND** no downstream outputs are emitted
 
+#### Scenario: Force constants cannot be read
+
+- **WHEN** a workflow is launched with a file that cannot be read as CASTEP force
+  constants, including truncated binary data, corrupt record markers, unsupported
+  CASTEP versions, or calculation outputs lacking force constants
+- **THEN** the workflow terminates with an exit code dedicated to failing to
+  obtain force constants, distinct from exit code 400, reporting why
+- **AND** no downstream outputs are emitted

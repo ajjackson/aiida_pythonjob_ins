@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import struct
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 from aiida.engine import run_get_node
 from aiida.manage.caching import enable_caching
 from aiida.orm import (
     BandsData,
+    CalcFunctionNode,
     CalcJobNode,
     Dict,
     Float,
@@ -27,6 +31,7 @@ from aiida_pythonjob_ins.workflows import (
     ToscaFromForceConstantsWorkChain,
     ToscaFromModesWorkChain,
 )
+from aiida_pythonjob_ins.workflows.base import read_castep_force_constants
 from aiida_pythonjob_ins.workflows.tosca import group_spectra
 
 # The process_type aiida-pythonjob registers PythonJob under -- see
@@ -35,11 +40,142 @@ from aiida_pythonjob_ins.workflows.tosca import group_spectra
 _PYTHONJOB_PROCESS_TYPE = "aiida.calculations:pythonjob.pythonjob"
 
 
+# --- read_castep_force_constants calcfunction -------------------------------
+
+
+def test_read_castep_force_constants_valid(quartz_castep_bin):
+    """A valid file yields a ForceConstantsData equivalent to the direct read.
+
+    Runs without a ``Code`` or ``Computer`` fixture -- the calcfunction is
+    in-process. The returned node is linked to the input ``SinglefileData`` via a
+    ``CalcFunctionNode``.
+    """
+    castep_file = SinglefileData(quartz_castep_bin)
+    result, node = run_get_node(read_castep_force_constants, castep_file=castep_file)
+
+    assert node.is_finished_ok, node.exit_status
+    assert isinstance(result, ForceConstantsData)
+    assert isinstance(node, CalcFunctionNode)
+    # The CalcFunctionNode links the input file to its output.
+    assert "castep_file" in node.inputs
+    assert node.inputs.castep_file.uuid == castep_file.uuid
+    assert "result" in node.outputs
+
+    # Equivalent to a direct public-API read on the same file.
+    expected = ForceConstants.from_castep(quartz_castep_bin)
+    got = result.get_force_constants()
+    np.testing.assert_allclose(got.force_constants, expected.force_constants)
+    np.testing.assert_allclose(got.crystal.cell_vectors, expected.crystal.cell_vectors)
+
+
+def test_read_castep_force_constants_junk(tmp_path):
+    """A junk file finishes with exit status 300, a named cause, and no outputs."""
+    junk = tmp_path / "junk.castep_bin"
+    junk.write_bytes(b"\x00\x01\x02 junk not castep \xff\xfe" * 100)
+    castep_file = SinglefileData(junk)
+
+    result, node = run_get_node(read_castep_force_constants, castep_file=castep_file)
+
+    assert not node.is_finished_ok
+    assert node.exit_status == 300
+    assert node.exit_message is not None
+    assert "Could not read CASTEP force constants" in node.exit_message
+    # No outputs are emitted on failure.
+    assert not result
+    assert not list(node.outputs)
+
+
+@pytest.mark.parametrize("n_bytes", [1, 3], ids=["1-byte", "3-byte"])
+def test_read_castep_force_constants_truncated(tmp_path, n_bytes):
+    """A file truncated under 4 bytes exits 300 (struct.error)."""
+    truncated = tmp_path / "truncated.castep_bin"
+    truncated.write_bytes(b"\x00" * n_bytes)
+    castep_file = SinglefileData(truncated)
+
+    result, node = run_get_node(read_castep_force_constants, castep_file=castep_file)
+
+    assert not node.is_finished_ok
+    assert node.exit_status == 300
+    assert node.exit_message is not None
+    assert "Could not read CASTEP force constants" in node.exit_message
+    assert not result
+    assert not list(node.outputs)
+
+
+def test_read_castep_force_constants_mismatched_markers(tmp_path):
+    """A file with mismatched Fortran record markers exits 300 (OSError)."""
+    corrupt = tmp_path / "mismatched.castep_bin"
+    # begin marker says 8 bytes of data; end marker says 4 -- they don't match.
+    corrupt.write_bytes(struct.pack(">i", 8) + b"\x00" * 8 + struct.pack(">i", 4))
+    castep_file = SinglefileData(corrupt)
+
+    result, node = run_get_node(read_castep_force_constants, castep_file=castep_file)
+
+    assert not node.is_finished_ok
+    assert node.exit_status == 300
+    assert node.exit_message is not None
+    assert "Could not read CASTEP force constants" in node.exit_message
+    assert not result
+    assert not list(node.outputs)
+
+
+def test_read_castep_force_constants_missing_force_constants(tmp_path):
+    """A valid CASTEP file lacking force constants exits 300 (RuntimeError).
+
+    Euphonic raises ``RuntimeError`` with "Force constants matrix could not be
+    found" when the ``FORCE_CON`` block is absent. The calcfunction catches this
+    by message and returns an ``ExitCode`` rather than excepting.
+    """
+    dummy = tmp_path / "dummy.castep_bin"
+    dummy.write_bytes(b"\x00" * 4)  # content irrelevant; from_castep is mocked
+    castep_file = SinglefileData(dummy)
+
+    with patch.object(
+        ForceConstantsData,
+        "from_castep",
+        side_effect=RuntimeError(
+            "Invalid file (dummy). Force constants matrix could not be found"
+        ),
+    ):
+        result, node = run_get_node(
+            read_castep_force_constants, castep_file=castep_file
+        )
+
+    assert not node.is_finished_ok
+    assert node.exit_status == 300
+    assert node.exit_message is not None
+    assert "Could not read CASTEP force constants" in node.exit_message
+    assert not result
+    assert not list(node.outputs)
+
+
+def test_read_castep_force_constants_unrelated_runtime_error_propagates(tmp_path):
+    """An unrelated RuntimeError is not caught and excepts the process.
+
+    Only ``RuntimeError`` whose message indicates missing force constants (or an
+    invalid file) is caught; genuine internal bugs propagate as Excepted.
+    """
+    dummy = tmp_path / "dummy.castep_bin"
+    dummy.write_bytes(b"\x00" * 4)
+    castep_file = SinglefileData(dummy)
+
+    with (
+        patch.object(
+            ForceConstantsData,
+            "from_castep",
+            side_effect=RuntimeError("Something completely different"),
+        ),
+        pytest.raises(RuntimeError, match="Something completely different"),
+    ):
+        run_get_node(read_castep_force_constants, castep_file=castep_file)
+
+
 def test_dispersion_workchain(python_code, quartz_castep_bin):
     """Read force constants -> q-point path -> modes -> band structure.
 
     Checks the native-type outputs (KpointsData path, BandsData) and that the
-    three PythonJob steps were orchestrated as one provenance graph.
+    workflow is orchestrated as one provenance graph. The read is an in-process
+    calcfunction (one CalcFunctionNode), not a dispatched PythonJob.
     """
     castep_file = SinglefileData(quartz_castep_bin)
 
@@ -72,10 +208,20 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
     assert bands.shape == (modes.frequencies.shape[0], n_branches)
     assert band_path.get_kpoints().shape[0] == bands.shape[0]
 
-    # Two PythonJob CalcJobs (read + interpolate) were orchestrated; the band path
-    # and band-structure steps are calcfunctions, not CalcJobs.
+    # The read is one in-process calcfunction, recorded as a CalcFunctionNode.
+    read_calcfunctions = [
+        p
+        for p in node.called_descendants
+        if isinstance(p, CalcFunctionNode)
+        and p.process_label == "read_castep_force_constants"
+    ]
+    assert len(read_calcfunctions) == 1
+    assert read_calcfunctions[0].inputs.castep_file.uuid == castep_file.uuid
+
+    # Only the interpolation PythonJob is dispatched; the read and band-structure
+    # steps are calcfunctions, not CalcJobs.
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
-    assert len(calcjobs) == 2
+    assert len(calcjobs) == 1
 
 
 def test_dos_workchain(python_code, quartz_castep_bin):
@@ -107,9 +253,19 @@ def test_dos_workchain(python_code, quartz_castep_bin):
     assert isinstance(node.inputs.options, Dict)
     assert node.inputs.options.get_dict()["max_wallclock_seconds"] == 3600
 
-    # read + dos, both PythonJobs
+    # The read is one in-process calcfunction, recorded as a CalcFunctionNode.
+    read_calcfunctions = [
+        p
+        for p in node.called_descendants
+        if isinstance(p, CalcFunctionNode)
+        and p.process_label == "read_castep_force_constants"
+    ]
+    assert len(read_calcfunctions) == 1
+    assert read_calcfunctions[0].inputs.castep_file.uuid == castep_file.uuid
+
+    # Only the DOS PythonJob is dispatched (the read is a calcfunction now).
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
-    assert len(calcjobs) == 2
+    assert len(calcjobs) == 1
     for calcjob in calcjobs:
         opts = calcjob.get_options()
         assert opts["resources"] == {
@@ -168,6 +324,126 @@ def test_workchain_requires_exactly_one_source(python_code, quartz_castep_bin):
             force_constants=fc_node,
             code=python_code,
         )
+
+
+def test_dispersion_read_failure_exits_410(python_code, tmp_path):
+    """An unreadable CASTEP file exits 410 with no outputs and no dispatched job.
+
+    The read calcfunction fails in-process (returning an ``ExitCode``), so the
+    workflow never reaches the interpolation step: no ``CalcJobNode`` is created
+    and no outputs are emitted.
+    """
+    junk = tmp_path / "junk.castep_bin"
+    junk.write_bytes(b"\x00\x01\x02 junk not castep \xff\xfe" * 100)
+    castep_file = SinglefileData(junk)
+
+    results, node = run_get_node(
+        DispersionWorkChain,
+        castep_file=castep_file,
+        q_spacing=Float(0.2),
+        code=python_code,
+    )
+
+    exit_codes = DispersionWorkChain.exit_codes
+    assert not node.is_finished_ok
+    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    # 410 is distinct from the PythonJob failure code 400.
+    assert node.exit_status != exit_codes.ERROR_SUB_PROCESS_FAILED.status
+    # No outputs and no dispatched jobs.
+    assert not results
+    assert not list(node.outputs)
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert calcjobs == []
+
+
+@pytest.mark.parametrize("n_bytes", [1, 3], ids=["1-byte", "3-byte"])
+def test_dispersion_truncated_file_exits_410(python_code, tmp_path, n_bytes):
+    """A sub-4-byte CASTEP file exits 410 with no outputs and no dispatched job."""
+    truncated = tmp_path / "truncated.castep_bin"
+    truncated.write_bytes(b"\x00" * n_bytes)
+    castep_file = SinglefileData(truncated)
+
+    results, node = run_get_node(
+        DispersionWorkChain,
+        castep_file=castep_file,
+        q_spacing=Float(0.2),
+        code=python_code,
+    )
+
+    exit_codes = DispersionWorkChain.exit_codes
+    assert not node.is_finished_ok
+    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    assert not results
+    assert not list(node.outputs)
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert calcjobs == []
+
+
+def test_dispersion_mismatched_markers_exits_410(python_code, tmp_path):
+    """Corrupt record markers exit 410 with no outputs and no dispatched job."""
+    corrupt = tmp_path / "mismatched.castep_bin"
+    corrupt.write_bytes(struct.pack(">i", 8) + b"\x00" * 8 + struct.pack(">i", 4))
+    castep_file = SinglefileData(corrupt)
+
+    results, node = run_get_node(
+        DispersionWorkChain,
+        castep_file=castep_file,
+        q_spacing=Float(0.2),
+        code=python_code,
+    )
+
+    exit_codes = DispersionWorkChain.exit_codes
+    assert not node.is_finished_ok
+    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    assert not results
+    assert not list(node.outputs)
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert calcjobs == []
+
+
+@pytest.mark.parametrize("n_bytes", [1, 3], ids=["1-byte", "3-byte"])
+def test_dos_truncated_file_exits_410(python_code, tmp_path, n_bytes):
+    """A sub-4-byte CASTEP file exits 410 with no outputs and no dispatched job."""
+    truncated = tmp_path / "truncated.castep_bin"
+    truncated.write_bytes(b"\x00" * n_bytes)
+    castep_file = SinglefileData(truncated)
+
+    results, node = run_get_node(
+        DosWorkChain,
+        castep_file=castep_file,
+        q_spacing=Float(0.5),
+        code=python_code,
+    )
+
+    exit_codes = DosWorkChain.exit_codes
+    assert not node.is_finished_ok
+    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    assert not results
+    assert not list(node.outputs)
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert calcjobs == []
+
+
+def test_dos_mismatched_markers_exits_410(python_code, tmp_path):
+    """Corrupt record markers exit 410 with no outputs and no dispatched job."""
+    corrupt = tmp_path / "mismatched.castep_bin"
+    corrupt.write_bytes(struct.pack(">i", 8) + b"\x00" * 8 + struct.pack(">i", 4))
+    castep_file = SinglefileData(corrupt)
+
+    results, node = run_get_node(
+        DosWorkChain,
+        castep_file=castep_file,
+        q_spacing=Float(0.5),
+        code=python_code,
+    )
+
+    exit_codes = DosWorkChain.exit_codes
+    assert not node.is_finished_ok
+    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    assert not results
+    assert not list(node.outputs)
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert calcjobs == []
 
 
 # --- ToscaFromModesWorkChain / ToscaFromForceConstantsWorkChain ---------------

@@ -21,8 +21,9 @@ code = get_python_code()
 # %%
 # Run the dispersion workflow
 # ---------------------------
-# The workflow reads the force constants (a PythonJob), builds a seekpath q-point
-# path, interpolates the phonon modes, and composes a band structure.
+# The workflow reads the force constants (an in-process calcfunction), builds a
+# seekpath q-point path, interpolates the phonon modes, and composes a band
+# structure.
 
 from aiida.plugins import WorkflowFactory
 
@@ -50,7 +51,7 @@ bands.show_mpl()
 # %%
 # Provenance
 # ----------
-# Every step -- the read/interpolate PythonJobs and the structure/path/bands
+# Every step -- the interpolation PythonJob and the read/structure/path/bands
 # calcfunctions -- is recorded. Here is the graph that produced the band
 # structure.
 
