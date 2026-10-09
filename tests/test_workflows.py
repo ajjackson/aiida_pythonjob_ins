@@ -31,7 +31,7 @@ from aiida_pythonjob_ins.workflows import (
     ToscaFromForceConstantsWorkChain,
     ToscaFromModesWorkChain,
 )
-from aiida_pythonjob_ins.workflows.base import read_castep_force_constants
+from aiida_pythonjob_ins.workflows.force_constants import read_castep_force_constants
 from aiida_pythonjob_ins.workflows.tosca import group_spectra
 
 # The process_type aiida-pythonjob registers PythonJob under -- see
@@ -174,14 +174,16 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
     """Read force constants -> q-point path -> modes -> band structure.
 
     Checks the native-type outputs (KpointsData path, BandsData) and that the
-    workflow is orchestrated as one provenance graph. The read is an in-process
-    calcfunction (one CalcFunctionNode), not a dispatched PythonJob.
+    workflow is orchestrated as one provenance graph. The force-constants source
+    is resolved by a ``ForceConstantsWorkChain`` sub-workflow, whose read step is
+    an in-process calcfunction (one ``CalcFunctionNode``), not a dispatched
+    PythonJob.
     """
     castep_file = SinglefileData(quartz_castep_bin)
 
     results, node = run_get_node(
         DispersionWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(0.2),  # coarse spacing keeps the test fast
         code=python_code,
     )
@@ -208,7 +210,24 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
     assert bands.shape == (modes.frequencies.shape[0], n_branches)
     assert band_path.get_kpoints().shape[0] == bands.shape[0]
 
-    # The read is one in-process calcfunction, recorded as a CalcFunctionNode.
+    # Exactly one ForceConstantsWorkChain is called as a sub-workflow.
+    fc_workchains = [
+        p
+        for p in node.called_descendants
+        if isinstance(p, WorkChainNode) and p.process_label == "ForceConstantsWorkChain"
+    ]
+    assert len(fc_workchains) == 1
+    # Its output feeds the next step: the interpolation PythonJob consumes the
+    # force constants the sub-workflow produced.
+    calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
+    assert len(calcjobs) == 1
+    assert (
+        calcjobs[0].inputs.function_inputs.force_constants.uuid
+        == fc_workchains[0].outputs.force_constants.uuid
+    )
+
+    # The read is one in-process calcfunction, called by the ForceConstantsWorkChain
+    # child -- not by this consumer directly.
     read_calcfunctions = [
         p
         for p in node.called_descendants
@@ -217,6 +236,7 @@ def test_dispersion_workchain(python_code, quartz_castep_bin):
     ]
     assert len(read_calcfunctions) == 1
     assert read_calcfunctions[0].inputs.castep_file.uuid == castep_file.uuid
+    assert read_calcfunctions[0].caller.uuid == fc_workchains[0].uuid
 
     # Only the interpolation PythonJob is dispatched; the read and band-structure
     # steps are calcfunctions, not CalcJobs.
@@ -230,7 +250,7 @@ def test_dos_workchain(python_code, quartz_castep_bin):
 
     results, node = run_get_node(
         DosWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(0.5),  # coarse grid keeps the test fast
         energy_spacing=Float(2.0),
         code=python_code,
@@ -253,7 +273,16 @@ def test_dos_workchain(python_code, quartz_castep_bin):
     assert isinstance(node.inputs.options, Dict)
     assert node.inputs.options.get_dict()["max_wallclock_seconds"] == 3600
 
-    # The read is one in-process calcfunction, recorded as a CalcFunctionNode.
+    # Exactly one ForceConstantsWorkChain is called as a sub-workflow.
+    fc_workchains = [
+        p
+        for p in node.called_descendants
+        if isinstance(p, WorkChainNode) and p.process_label == "ForceConstantsWorkChain"
+    ]
+    assert len(fc_workchains) == 1
+
+    # The read is one in-process calcfunction, called by the ForceConstantsWorkChain
+    # child -- not by this consumer directly.
     read_calcfunctions = [
         p
         for p in node.called_descendants
@@ -262,6 +291,7 @@ def test_dos_workchain(python_code, quartz_castep_bin):
     ]
     assert len(read_calcfunctions) == 1
     assert read_calcfunctions[0].inputs.castep_file.uuid == castep_file.uuid
+    assert read_calcfunctions[0].caller.uuid == fc_workchains[0].uuid
 
     # Only the DOS PythonJob is dispatched (the read is a calcfunction now).
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
@@ -289,12 +319,19 @@ def test_dispersion_from_phonopy(python_code, phonopy_dir):
     """DispersionWorkChain accepts a ForceConstantsData (here from Phonopy)."""
     results, node = run_get_node(
         DispersionWorkChain,
-        force_constants=_force_constants_from_phonopy(phonopy_dir),
+        force_constants={"node": _force_constants_from_phonopy(phonopy_dir)},
         q_spacing=Float(0.3),
         code=python_code,
     )
     assert node.is_finished_ok, node.exit_status
     assert isinstance(results["band_structure"], BandsData)
+    # Exactly one ForceConstantsWorkChain is called, even for a node source.
+    fc_workchains = [
+        p
+        for p in node.called_descendants
+        if isinstance(p, WorkChainNode) and p.process_label == "ForceConstantsWorkChain"
+    ]
+    assert len(fc_workchains) == 1
     # No CASTEP read step, so only the interpolation PythonJob runs.
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
     assert len(calcjobs) == 1
@@ -304,7 +341,7 @@ def test_dos_from_phonopy(python_code, phonopy_dir):
     """DosWorkChain accepts a ForceConstantsData (here from Phonopy)."""
     results, node = run_get_node(
         DosWorkChain,
-        force_constants=_force_constants_from_phonopy(phonopy_dir),
+        force_constants={"node": _force_constants_from_phonopy(phonopy_dir)},
         q_spacing=Float(0.5),
         energy_spacing=Float(2.0),
         code=python_code,
@@ -314,24 +351,24 @@ def test_dos_from_phonopy(python_code, phonopy_dir):
 
 
 def test_workchain_requires_exactly_one_source(python_code, quartz_castep_bin):
-    """Providing both castep_file and force_constants is rejected."""
+    """Providing both castep_file and force constants node is rejected."""
     castep_file = SinglefileData(quartz_castep_bin)
     fc_node = ForceConstantsData(ForceConstants.from_castep(quartz_castep_bin))
     with pytest.raises(ValueError, match="exactly one"):
         run_get_node(
             DispersionWorkChain,
-            castep_file=castep_file,
-            force_constants=fc_node,
+            force_constants={"castep_file": castep_file, "node": fc_node},
             code=python_code,
         )
 
 
-def test_dispersion_read_failure_exits_410(python_code, tmp_path):
-    """An unreadable CASTEP file exits 410 with no outputs and no dispatched job.
+def test_dispersion_read_failure_exits_402(python_code, tmp_path):
+    """An unreadable CASTEP file exits 402 with no outputs and no dispatched job.
 
-    The read calcfunction fails in-process (returning an ``ExitCode``), so the
-    workflow never reaches the interpolation step: no ``CalcJobNode`` is created
-    and no outputs are emitted.
+    The ``ForceConstantsWorkChain`` sub-workflow fails its read (exiting 410), and
+    the consumer reports that failure with its own 402 -- distinct from 400.
+    The consumer never reaches the interpolation step: no ``CalcJobNode`` is
+    created and no outputs are emitted.
     """
     junk = tmp_path / "junk.castep_bin"
     junk.write_bytes(b"\x00\x01\x02 junk not castep \xff\xfe" * 100)
@@ -339,15 +376,17 @@ def test_dispersion_read_failure_exits_410(python_code, tmp_path):
 
     results, node = run_get_node(
         DispersionWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(0.2),
         code=python_code,
     )
 
     exit_codes = DispersionWorkChain.exit_codes
     assert not node.is_finished_ok
-    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
-    # 410 is distinct from the PythonJob failure code 400.
+    assert (
+        node.exit_status == exit_codes.ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS.status
+    )
+    # 402 is distinct from the PythonJob failure code 400.
     assert node.exit_status != exit_codes.ERROR_SUB_PROCESS_FAILED.status
     # No outputs and no dispatched jobs.
     assert not results
@@ -357,44 +396,48 @@ def test_dispersion_read_failure_exits_410(python_code, tmp_path):
 
 
 @pytest.mark.parametrize("n_bytes", [1, 3], ids=["1-byte", "3-byte"])
-def test_dispersion_truncated_file_exits_410(python_code, tmp_path, n_bytes):
-    """A sub-4-byte CASTEP file exits 410 with no outputs and no dispatched job."""
+def test_dispersion_truncated_file_exits_402(python_code, tmp_path, n_bytes):
+    """A sub-4-byte CASTEP file exits 402 with no outputs and no dispatched job."""
     truncated = tmp_path / "truncated.castep_bin"
     truncated.write_bytes(b"\x00" * n_bytes)
     castep_file = SinglefileData(truncated)
 
     results, node = run_get_node(
         DispersionWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(0.2),
         code=python_code,
     )
 
     exit_codes = DispersionWorkChain.exit_codes
     assert not node.is_finished_ok
-    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    assert (
+        node.exit_status == exit_codes.ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS.status
+    )
     assert not results
     assert not list(node.outputs)
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
     assert calcjobs == []
 
 
-def test_dispersion_mismatched_markers_exits_410(python_code, tmp_path):
-    """Corrupt record markers exit 410 with no outputs and no dispatched job."""
+def test_dispersion_mismatched_markers_exits_402(python_code, tmp_path):
+    """Corrupt record markers exit 402 with no outputs and no dispatched job."""
     corrupt = tmp_path / "mismatched.castep_bin"
     corrupt.write_bytes(struct.pack(">i", 8) + b"\x00" * 8 + struct.pack(">i", 4))
     castep_file = SinglefileData(corrupt)
 
     results, node = run_get_node(
         DispersionWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(0.2),
         code=python_code,
     )
 
     exit_codes = DispersionWorkChain.exit_codes
     assert not node.is_finished_ok
-    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    assert (
+        node.exit_status == exit_codes.ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS.status
+    )
     assert not results
     assert not list(node.outputs)
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
@@ -402,44 +445,48 @@ def test_dispersion_mismatched_markers_exits_410(python_code, tmp_path):
 
 
 @pytest.mark.parametrize("n_bytes", [1, 3], ids=["1-byte", "3-byte"])
-def test_dos_truncated_file_exits_410(python_code, tmp_path, n_bytes):
-    """A sub-4-byte CASTEP file exits 410 with no outputs and no dispatched job."""
+def test_dos_truncated_file_exits_402(python_code, tmp_path, n_bytes):
+    """A sub-4-byte CASTEP file exits 402 with no outputs and no dispatched job."""
     truncated = tmp_path / "truncated.castep_bin"
     truncated.write_bytes(b"\x00" * n_bytes)
     castep_file = SinglefileData(truncated)
 
     results, node = run_get_node(
         DosWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(0.5),
         code=python_code,
     )
 
     exit_codes = DosWorkChain.exit_codes
     assert not node.is_finished_ok
-    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    assert (
+        node.exit_status == exit_codes.ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS.status
+    )
     assert not results
     assert not list(node.outputs)
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
     assert calcjobs == []
 
 
-def test_dos_mismatched_markers_exits_410(python_code, tmp_path):
-    """Corrupt record markers exit 410 with no outputs and no dispatched job."""
+def test_dos_mismatched_markers_exits_402(python_code, tmp_path):
+    """Corrupt record markers exit 402 with no outputs and no dispatched job."""
     corrupt = tmp_path / "mismatched.castep_bin"
     corrupt.write_bytes(struct.pack(">i", 8) + b"\x00" * 8 + struct.pack(">i", 4))
     castep_file = SinglefileData(corrupt)
 
     results, node = run_get_node(
         DosWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(0.5),
         code=python_code,
     )
 
     exit_codes = DosWorkChain.exit_codes
     assert not node.is_finished_ok
-    assert node.exit_status == exit_codes.ERROR_READ_FAILED.status
+    assert (
+        node.exit_status == exit_codes.ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS.status
+    )
     assert not results
     assert not list(node.outputs)
     calcjobs = [p for p in node.called_descendants if isinstance(p, CalcJobNode)]
@@ -563,7 +610,7 @@ def test_tosca_from_force_constants_workchain(python_code, quartz_castep_bin):
 
     results, node = run_get_node(
         ToscaFromForceConstantsWorkChain,
-        castep_file=castep_file,
+        force_constants={"castep_file": castep_file},
         q_spacing=Float(1.0),  # coarse grid keeps the test fast
         spectrum={"energy_spacing": Float(50.0), "detector_angles": List(list=[135.0])},
         code=python_code,
@@ -573,13 +620,14 @@ def test_tosca_from_force_constants_workchain(python_code, quartz_castep_bin):
     assert isinstance(results["components"], XyData)
     assert isinstance(results["spectrum"], XyData)
 
-    # The delegated modes-based workflow is a called sub-workflow, with the
-    # interpolated modes linking the two.
+    # Both the force-constants source and the delegated spectrum workflow appear
+    # as called sub-workchains.
     sub_workchains = [
         p for p in node.called_descendants if isinstance(p, WorkChainNode)
     ]
-    assert len(sub_workchains) == 1
-    assert sub_workchains[0].process_label == "ToscaFromModesWorkChain"
+    sub_labels = [p.process_label for p in sub_workchains]
+    assert sub_labels.count("ForceConstantsWorkChain") == 1
+    assert sub_labels.count("ToscaFromModesWorkChain") == 1
 
 
 def test_tosca_from_force_constants_accepts_a_prepared_node(
@@ -590,7 +638,7 @@ def test_tosca_from_force_constants_accepts_a_prepared_node(
 
     results, node = run_get_node(
         ToscaFromForceConstantsWorkChain,
-        force_constants=fc_node,
+        force_constants={"node": fc_node},
         q_spacing=Float(1.0),
         spectrum={"energy_spacing": Float(50.0), "detector_angles": List(list=[135.0])},
         code=python_code,
@@ -624,7 +672,7 @@ def test_tosca_from_force_constants_failure_is_distinguishable(
 
     _, node = run_get_node(
         ToscaFromForceConstantsWorkChain,
-        force_constants=fc_node,
+        force_constants={"node": fc_node},
         q_spacing=Float(1.0),
         spectrum={
             "energy_spacing": Float(50.0),

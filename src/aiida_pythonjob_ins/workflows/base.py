@@ -1,95 +1,48 @@
-"""Shared base WorkChain that obtains force constants for a phonon calculation.
+"""Abstract base WorkChains, one per reusable feature.
 
-The concrete workflows (dispersion, DOS, TOSCA) all need a ``ForceConstantsData`` to
-work from. This base lets that come from *either*:
+Two independent features are split into two abstract bases so that a workflow
+inherits only what it needs:
 
-* a CASTEP ``castep_file`` (``SinglefileData``) -- read in-process by the
-  :func:`read_castep_force_constants` calcfunction (provenance-recorded, but not
-  dispatched; the file-staging PythonJob pattern is still demonstrated by
-  :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_force_constants_inputs`,
-  exercised by ``tests/test_remote_ssh.py``), or
-* a pre-built ``force_constants`` (``ForceConstantsData``) node -- e.g. produced
-  from Phonopy input (see
-  :func:`aiida_pythonjob_ins.pythonjobs.prepare_read_phonopy_inputs`) or any other
-  source.
+* :class:`JobDispatchWorkChain` -- the ``code``/``options`` dispatch plumbing
+  (inputs, ``get_job_metadata()`` and the ``400 ERROR_SUB_PROCESS_FAILED`` exit
+  code) shared by every workflow that runs PythonJobs.
+* :class:`FromForceConstantsWorkChain` -- obtaining force constants by running
+  :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+  as a sub-workflow, exposing its inputs under a ``force_constants`` namespace
+  (so its "exactly one" validator lives in the namespace and cannot collide
+  with a parent's own validator) and reporting its failure with ``402
+  ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS``.
 
-Subclasses add their own inputs/outputs and an outline that begins with::
-
-    cls.resolve_force_constants,
-    ...  # their compute steps, using ``self.ctx.force_constants``
-
-Reading Phonopy inside the workflow is intentionally *not* built in here: Phonopy
-needs several files, so it is cleaner to read it up front into a
-``ForceConstantsData`` and pass that as ``force_constants``.
+Each base subclasses ``WorkChain`` directly (rather than being a plain mixin) so
+its spec can be built and tested on its own, and neither references the other's
+ports, methods or exit codes. Neither has an outline: consumers add their own,
+starting ``cls.run_force_constants, cls.inspect_force_constants, ...`` where
+they use the force-constants source. Plumpy's method resolution order builds one
+spec through every base when a consumer subclasses several, provided each base's
+``define`` calls ``super().define(spec)``.
 """
 
 from __future__ import annotations
 
-import struct
 from typing import Any
 
-from aiida.engine import ExitCode, WorkChain, calcfunction
-from aiida.orm import AbstractCode, Dict, SinglefileData, to_aiida_type
+from aiida.engine import ExitCode, ToContext, WorkChain
+from aiida.orm import AbstractCode, Dict, to_aiida_type
 
-from aiida_pythonjob_ins.data import ForceConstantsData
-
-
-@calcfunction
-def read_castep_force_constants(
-    castep_file: SinglefileData,
-) -> ForceConstantsData | ExitCode:
-    """Read a CASTEP ``SinglefileData`` into a :class:`ForceConstantsData` in-process.
-
-    A calcfunction (not a dispatched PythonJob): the read takes about 0.1 s, so the
-    ~2.8 s of job machinery it used to incur is unjustified. It records a
-    ``CalcFunctionNode`` linking the file to the ``ForceConstantsData`` it
-    produces, and it can be cached.
-
-    An unreadable or invalid file returns an ``ExitCode(300, ...)`` rather than
-    raising. All foreseeable Euphonic reader failures on truncated, corrupt, or
-    non-phonon CASTEP inputs are caught per AiiDA's guidance to return an
-    ``ExitCode`` for classifiable failures. ``RuntimeError`` is matched by
-    message so that genuine internal bugs continue to propagate as Excepted
-    processes.
-    """
-    try:
-        with castep_file.as_path() as path:
-            return ForceConstantsData.from_castep(path)
-    except (EOFError, struct.error, OSError, ValueError) as exc:
-        return ExitCode(300, f"Could not read CASTEP force constants: {exc}")
-    except RuntimeError as exc:
-        msg = str(exc)
-        if "Force constants matrix could not be found" in msg or "Invalid file" in msg:
-            return ExitCode(300, f"Could not read CASTEP force constants: {exc}")
-        raise
+from aiida_pythonjob_ins.workflows.force_constants import ForceConstantsWorkChain
 
 
-class ForceConstantsWorkChain(WorkChain):
-    """Resolve ``self.ctx.force_constants`` from a CASTEP file or a given node.
+class JobDispatchWorkChain(WorkChain):
+    """Abstract base providing ``code``/``options`` dispatch for PythonJobs.
 
     Exit Codes:
-        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish successfully.
-        * 410 (ERROR_READ_FAILED): The force constants could not be read.
+        * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step did not finish
+          successfully.
     """
 
     @classmethod
     def define(cls, spec) -> None:
         super().define(spec)
-        spec.input(
-            "castep_file",
-            valid_type=SinglefileData,
-            required=False,
-            help=(
-                "CASTEP .castep_bin/.check file, read in-process by the "
-                "``read_castep_force_constants`` calcfunction."
-            ),
-        )
-        spec.input(
-            "force_constants",
-            valid_type=ForceConstantsData,
-            required=False,
-            help="Pre-built force constants (e.g. from Phonopy); skips the read step.",
-        )
         spec.input(
             "code",
             valid_type=AbstractCode,
@@ -100,28 +53,15 @@ class ForceConstantsWorkChain(WorkChain):
             valid_type=Dict,
             required=False,
             serializer=to_aiida_type,
-            help="Optional scheduler and execution options passed to child PythonJobs.",
+            help=(
+                "Optional scheduler and execution options passed to child PythonJobs."
+            ),
         )
-        spec.inputs.validator = cls._validate_source
         spec.exit_code(
             400,
             "ERROR_SUB_PROCESS_FAILED",
             message="A PythonJob step did not finish successfully.",
         )
-        spec.exit_code(
-            410,
-            "ERROR_READ_FAILED",
-            message="The force constants could not be read.",
-        )
-
-    @staticmethod
-    def _validate_source(inputs, _port) -> str | None:
-        """Require exactly one of ``castep_file`` / ``force_constants``."""
-        has_file = "castep_file" in inputs
-        has_fc = "force_constants" in inputs
-        if has_file == has_fc:
-            return "Provide exactly one of `castep_file` or `force_constants`."
-        return None
 
     def get_job_metadata(self) -> dict[str, Any]:
         """Return metadata dictionary for child PythonJobs."""
@@ -129,26 +69,54 @@ class ForceConstantsWorkChain(WorkChain):
             return {"options": self.inputs.options.get_dict()}
         return {}
 
-    def resolve_force_constants(self) -> ExitCode | None:
-        """Set ``self.ctx.force_constants`` from the supplied node or the read step.
 
-        A single outline step replacing the former
-        ``if_(cls.should_read_castep)(cls.read_force_constants),
-        cls.assign_force_constants`` pair. Calcfunctions run synchronously, so the
-        split that existed only to wait on a submitted job is no longer needed.
+class FromForceConstantsWorkChain(WorkChain):
+    """Abstract base obtaining force constants from a sub-workflow.
 
-        If a ``force_constants`` node was supplied, it is used directly. Otherwise
-        the in-process :func:`read_castep_force_constants` calcfunction reads the
-        ``castep_file``; a failed read terminates the workflow with
-        ``ERROR_READ_FAILED`` (410) rather than proceeding with missing data.
-        """
-        if "force_constants" in self.inputs:
-            self.ctx.force_constants = self.inputs.force_constants
-            return None
+    Exposes the inputs of
+    :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+    under a required ``force_constants`` namespace and runs that workchain as a
+    child to resolve ``self.ctx.force_constants``, always delegating to the
+    child (even for a prepared node, which is passed through) so every run has
+    exactly one ``ForceConstantsWorkChain`` in the provenance graph. Consumers
+    start their outline with ``cls.run_force_constants, cls.inspect_force_constants``.
 
-        result, node = read_castep_force_constants.run_get_node(self.inputs.castep_file)
-        if node.is_finished_ok:
-            self.ctx.force_constants = result
-            return None
-        self.report(node.exit_message)
-        return self.exit_codes.ERROR_READ_FAILED
+    Exit Codes:
+        * 402 (ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS): The
+          ``ForceConstantsWorkChain`` sub-workflow did not finish successfully.
+    """
+
+    @classmethod
+    def define(cls, spec) -> None:
+        super().define(spec)
+        spec.expose_inputs(
+            ForceConstantsWorkChain,
+            namespace="force_constants",
+        )
+        spec.exit_code(
+            402,
+            "ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS",
+            message=(
+                "The ForceConstantsWorkChain sub-workflow did not finish successfully."
+            ),
+        )
+
+    def run_force_constants(self):
+        """Submit the ``ForceConstantsWorkChain`` child with exposed inputs."""
+        inputs = self.exposed_inputs(
+            ForceConstantsWorkChain, namespace="force_constants"
+        )
+        return ToContext(
+            force_constants_workchain=self.submit(ForceConstantsWorkChain, **inputs)
+        )
+
+    def inspect_force_constants(self) -> ExitCode | None:
+        """Store the child's output, or fail with 402 if it did not finish ok."""
+        workchain = self.ctx.force_constants_workchain
+        if not workchain.is_finished_ok:
+            self.report(
+                f"ForceConstantsWorkChain failed with exit code {workchain.exit_status}"
+            )
+            return self.exit_codes.ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS
+        self.ctx.force_constants = workchain.outputs.force_constants
+        return None

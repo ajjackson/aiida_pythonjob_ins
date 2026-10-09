@@ -33,7 +33,9 @@ DispersionWorkChain = WorkflowFactory("pythonjob_ins.dispersion")
 
 results, node = run_get_node(
     DispersionWorkChain,
-    castep_file=orm.SinglefileData(example_data("quartz.castep_bin")),
+    force_constants={
+        "castep_file": orm.SinglefileData(example_data("quartz.castep_bin"))
+    },
     q_spacing=orm.Float(0.05),
     code=code,
 )

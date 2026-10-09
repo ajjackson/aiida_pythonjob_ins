@@ -1,40 +1,38 @@
 """WorkChains composing the TOSCA scattering-intensity operations.
 
-Two chains, split by input rather than combined into one with an either/or port
-(see `proposal.md` and Decision 1 in `design.md`): a required parameter for one
-input (`q_spacing`) would be meaningless for the other, which a flat process spec
-cannot express honestly.
+Two chains, split by input rather than combined into one with an either/or port:
+a required parameter for one input (`q_spacing`) would be meaningless for the
+other, which a flat process spec cannot express honestly.
 
 * :class:`ToscaFromModesWorkChain` -- the stable core. Takes prepared phonon
   modes and nothing else as a source; independently runnable.
-* :class:`ToscaFromForceConstantsWorkChain` -- **inherits**
-  :class:`~aiida_pythonjob_ins.workflows.base.ForceConstantsWorkChain` (it
-  genuinely is a force-constants-sourced chain) while **composing**
-  :class:`ToscaFromModesWorkChain` through AiiDA's exposed-input/output
+* :class:`ToscaFromForceConstantsWorkChain` -- resolves force constants
+  by running
+  :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+  as a sub-workflow (it genuinely is a force-constants-sourced chain) while
+  **composing** :class:`ToscaFromModesWorkChain` through AiiDA's exposed-input/output
   machinery, mirroring `PwBandsWorkChain` exposing `PwBaseWorkChain`
   (https://github.com/aiidateam/aiida-quantumespresso/blob/main/src/aiida_quantumespresso/workflows/pw/bands.py).
 
 `ToscaFromModesWorkChain` runs three provenance steps, split so that a change to
-one input does not invalidate the others under caching (Decision 5):
+one input does not invalidate the others under caching:
 
 1. ``compute_intensities`` -- a PythonJob computing the full, ungrouped line set
    (every atom x quantum-order x detector-angle component). Expensive; the step
    this design exists to make reusable.
 2. ``group_spectra`` -- a cheap ``calcfunction`` grouping/summing that line set by
-   caller-supplied metadata keys (Decision 6).
+   caller-supplied metadata keys.
 3. ``broaden_spectra`` -- a cheap ``calcfunction`` applying TOSCA's resolution
-   broadening to the grouped result (Decision 9). Broadening after grouping is
+   broadening to the grouped result. Broadening after grouping is
    exact, not approximate: the resolution operator is linear, so
    ``broaden(sum(y)) == sum(broaden(y))``.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
 from aiida.common import AttributeDict
-from aiida.engine import ExitCode, ToContext, WorkChain, calcfunction
-from aiida.orm import AbstractCode, Dict, Float, List, Str, XyData, to_aiida_type
+from aiida.engine import ExitCode, ToContext, calcfunction
+from aiida.orm import Float, List, Str, XyData
 from aiida_pythonjob import PythonJob
 
 from aiida_pythonjob_ins.conversions import (
@@ -47,7 +45,10 @@ from aiida_pythonjob_ins.pythonjobs import (
     prepare_grid_interpolation_inputs,
     prepare_tosca_spectrum_inputs,
 )
-from aiida_pythonjob_ins.workflows.base import ForceConstantsWorkChain
+from aiida_pythonjob_ins.workflows.base import (
+    FromForceConstantsWorkChain,
+    JobDispatchWorkChain,
+)
 
 
 @calcfunction
@@ -58,7 +59,7 @@ def group_spectra(components: XyData, group_by: List) -> XyData:
     already returns a one-line ``Spectrum1DCollection`` (unlike ``sum()``, which
     returns a bare ``Spectrum1D``), so routing both cases through ``group_by``
     keeps this function's return type -- and therefore the conversion back to
-    ``XyData`` -- uniform (Decision 6).
+    ``XyData`` -- uniform.
     """
     collection = xydata_to_spectrum_collection(components)
     grouped = collection.group_by(*group_by.get_list())
@@ -73,14 +74,14 @@ def broaden_spectra(grouped: XyData, resolution_model: Str) -> XyData:
     return spectrum_collection_to_xydata(broadened)
 
 
-class ToscaFromModesWorkChain(WorkChain):
+class ToscaFromModesWorkChain(JobDispatchWorkChain):
     """Compute a TOSCA spectrum from prepared phonon modes.
 
     Takes a ``QpointPhononModesData`` node and nothing else as a source: no
     file-reading step is offered, so this chain carries no q-point sampling
     parameter (that belongs to :class:`ToscaFromForceConstantsWorkChain`, which
-    composes this one). See Decision 2 in `design.md` for why the core requires
-    a node rather than a file path.
+    composes this one). The node-taking chain is the stable centre; any
+    file-ingesting convenience composes around it rather than altering the core.
 
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): The intensity PythonJob did not finish
@@ -151,18 +152,6 @@ class ToscaFromModesWorkChain(WorkChain):
                 "default) yields a single total spectrum."
             ),
         )
-        spec.input(
-            "code",
-            valid_type=AbstractCode,
-            help="Python code used to run the intensity PythonJob.",
-        )
-        spec.input(
-            "options",
-            valid_type=Dict,
-            required=False,
-            serializer=to_aiida_type,
-            help="Optional scheduler and execution options passed to child PythonJobs.",
-        )
         spec.outline(
             cls.compute_intensities,
             cls.group,
@@ -188,12 +177,6 @@ class ToscaFromModesWorkChain(WorkChain):
             "ERROR_SUB_PROCESS_FAILED",
             message="The intensity PythonJob did not finish successfully.",
         )
-
-    def get_job_metadata(self) -> dict[str, Any]:
-        """Return metadata dictionary for child PythonJobs."""
-        if "options" in self.inputs:
-            return {"options": self.inputs.options.get_dict()}
-        return {}
 
     def compute_intensities(self):
         """Compute the full, ungrouped line set as a PythonJob."""
@@ -230,11 +213,14 @@ class ToscaFromModesWorkChain(WorkChain):
         self.out("spectrum", self.ctx.spectrum)
 
 
-class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
+class ToscaFromForceConstantsWorkChain(
+    FromForceConstantsWorkChain, JobDispatchWorkChain
+):
     """Compute a TOSCA spectrum from force constants, via interpolated modes.
 
-    Inherits :class:`~aiida_pythonjob_ins.workflows.base.ForceConstantsWorkChain`
-    for the force-constants source (a CASTEP file, read in-process by the
+    Resolves force constants by running
+    :class:`~aiida_pythonjob_ins.workflows.force_constants.ForceConstantsWorkChain`
+    as a sub-workflow (a CASTEP file, read in-process by the
     ``read_castep_force_constants`` calcfunction, or a prepared node -- exactly
     one, as usual), interpolates modes on a Monkhorst-Pack grid (a powder
     average, matching :class:`~aiida_pythonjob_ins.workflows.dos.DosWorkChain`
@@ -243,19 +229,20 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
     almost-isotropic incoherent approximation needs a representative *density*
     of modes, not specific q-point positions), and delegates the spectrum
     calculation to :class:`ToscaFromModesWorkChain` rather than reimplementing
-    it (Decision 1).
+    it, so the intensity calculation stays reusable.
 
     Exit Codes:
         * 400 (ERROR_SUB_PROCESS_FAILED): A PythonJob step of this workflow's own
           (the mode interpolation) did not finish successfully.
-        * 410 (ERROR_READ_FAILED): The force constants could not be read.
         * 401 (ERROR_SPECTRUM_WORKCHAIN_FAILED): The delegated
           ``ToscaFromModesWorkChain`` did not finish successfully.
+        * 402 (ERROR_SUB_PROCESS_FAILED_FORCE_CONSTANTS): The
+          ``ForceConstantsWorkChain`` sub-workflow did not finish successfully.
     """
 
     @classmethod
     def define(cls, spec) -> None:
-        super().define(spec)  # castep_file / force_constants / code + validator
+        super().define(spec)  # force_constants namespace + code/options + exit codes
         spec.input(
             "q_spacing",
             valid_type=Float,
@@ -273,13 +260,14 @@ class ToscaFromForceConstantsWorkChain(ForceConstantsWorkChain):
                 "help": (
                     "Scientific and instrument inputs forwarded to the composed "
                     "ToscaFromModesWorkChain (modes and code excluded: modes is "
-                    "produced internally, and code is shared with the "
-                    "force-constants step above)."
+                    "produced internally, and code is provided at the top level "
+                    "for this workflow's own mode-interpolation step)."
                 )
             },
         )
         spec.outline(
-            cls.resolve_force_constants,
+            cls.run_force_constants,
+            cls.inspect_force_constants,
             cls.interpolate_modes,
             cls.compute_spectrum,
             cls.finalize,

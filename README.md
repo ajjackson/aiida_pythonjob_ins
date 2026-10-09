@@ -88,13 +88,16 @@ uv run pytest -n 0
 - **Input formats**: read force constants from CASTEP (`.castep_bin`) or from
   Phonopy output (`phonopy.yaml` + `FORCE_CONSTANTS` [+ `BORN`]); read phonon
   modes from a Euphonic `QpointPhononModes` JSON dump.
-- **Workflows** starting from force constants (each accepts a `castep_file` *or*
-  a pre-built `force_constants` node, so they work equally from CASTEP or
-  Phonopy input):
-  - `DispersionWorkChain` chains an in-process read `calcfunction` (when starting
-    from a CASTEP file) with three other `calcfunction`s (extract structure, build
-    q-point path, compose `BandsData`) and an interpolation `PythonJob`, with
-    full provenance.
+- **Workflows** starting from force constants (each takes a `force_constants`
+  input namespace holding *either* a CASTEP `castep_file` *or* a prepared
+  `ForceConstantsData` as `node`, so they work equally from CASTEP or Phonopy
+  input):
+  - `ForceConstantsWorkChain` resolves that source into a `ForceConstantsData`,
+    reading a CASTEP file in-process with a `calcfunction`. The workflows below
+    run it as a sub-workflow, and it can also be launched on its own.
+  - `DispersionWorkChain` follows it with three `calcfunction`s (extract
+    structure, build q-point path, compose `BandsData`) and an interpolation
+    `PythonJob`, with full provenance.
   - `DosWorkChain` computes a phonon density of states (Monkhorst-Pack sampling +
     adaptive broadening) as a native `XyData`.
   - `ToscaFromForceConstantsWorkChain` samples modes across the Brillouin zone
@@ -125,7 +128,9 @@ code = orm.load_code("python3@localhost")
 
 results, node = run_get_node(
     DispersionWorkChain,
-    castep_file=orm.SinglefileData("quartz.castep_bin"),
+    force_constants={
+        "castep_file": orm.SinglefileData("quartz.castep_bin"),
+    },
     q_spacing=orm.Float(0.025),
     code=code,
 )

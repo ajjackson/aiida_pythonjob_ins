@@ -309,7 +309,8 @@ def calculate_dos(
 # `resins` (instrument resolution functions). Like the rest of this module they
 # are plain, AiiDA-free functions using only public APIs; see the reference
 # pipeline (abINS_lib's TOSCA tutorial) cited in
-# openspec/changes/abinslib-workflow/design.md for the calculation this mirrors.
+# openspec/changes/archive/2026-08-24-abinslib-workflow/design.md for the
+# calculation this mirrors.
 #
 # abinslib decouples cross-section weighting from intensity calculations:
 # `calculate_almost_isotropic_incoherent_spectra` and

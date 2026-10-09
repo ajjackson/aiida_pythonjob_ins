@@ -60,7 +60,9 @@ ToscaFromForceConstantsWorkChain = WorkflowFactory(
 
 results, node = run_get_node(
     ToscaFromForceConstantsWorkChain,
-    castep_file=orm.SinglefileData(example_data("quartz.castep_bin")),
+    force_constants={
+        "castep_file": orm.SinglefileData(example_data("quartz.castep_bin"))
+    },
     q_spacing=orm.Float(0.5),  # MP-grid spacing (1/Angstrom); see the note above
     spectrum={
         "temperature": orm.Float(10.0),  # kelvin

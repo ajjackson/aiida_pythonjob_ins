@@ -37,5 +37,5 @@ Prerequisite: `migrate-castep-reader-to-calcfunction`, which provides the in-pro
 
 - `src/aiida_pythonjob_ins/workflows/`: new `force_constants.py`; `base.py` becomes two independent abstract bases; `dispersion.py`, `dos.py` and `tosca.py` are rewired; `__init__.py` exports the new workflow.
 - `pyproject.toml`: one new `aiida.workflows` entry point.
-- Tests: `test_workflows.py`, `test_entry_points.py`, plus a new `test_force_constants_workchain.py`.
+- Tests: `test_workflows.py`, `test_remote_ssh.py`, `test_entry_points.py`, plus a new `test_force_constants_workchain.py`.
 - Docs: `workflows.rst`, the tutorials (`plot_dispersion.py`, `plot_dos.py`, `plot_phonopy_bands_and_dos.py`, `plot_tosca_from_force_constants.py`), `README.md`, `CHANGELOG.md`.

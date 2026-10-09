@@ -31,7 +31,9 @@ DosWorkChain = WorkflowFactory("pythonjob_ins.dos")
 
 results, node = run_get_node(
     DosWorkChain,
-    castep_file=orm.SinglefileData(example_data("quartz.castep_bin")),
+    force_constants={
+        "castep_file": orm.SinglefileData(example_data("quartz.castep_bin"))
+    },
     q_spacing=orm.Float(0.15),  # MP-grid spacing (1/Angstrom)
     energy_spacing=orm.Float(1.0),  # DOS bin width (meV)
     code=code,
